@@ -1,11 +1,12 @@
-import GLOSADashboard from './GLOSADashboard'
+// src/App.jsx
+import React from 'react';
+import GLOSADashboard from './components/GLOSADashboard/GLOSADashboard';
+import './App.css';
 
 function App() {
     return (
-        <div>
-            <GLOSADashboard />
-        </div>
-    )
+        <GLOSADashboard />
+    );
 }
 
-export default App
+export default App;
