@@ -1,4 +1,6 @@
 // src/components/GLOSADashboard/GLOSADashboard.jsx
+// (No functional changes needed for layout based on review - providing full code for completeness)
+
 import { useState, useEffect, useMemo } from 'react';
 import { useGlosaData } from '../../hooks/useGlosaData';
 import LoadingIndicator from '../Common/LoadingIndicator';
@@ -15,34 +17,50 @@ const GLOSADashboard = () => {
     const [selectedPassIndex, setSelectedPassIndex] = useState(null);
     const [activeTab, setActiveTab] = useState('overview');
 
-    // Find the currently selected pass-through object
+    // Memoize finding the selected pass-through object
     const selectedPass = useMemo(() => {
         if (selectedPassIndex === null || !intersections) {
             return null;
         }
+        // Iterate through intersections to find the pass-through with the matching index
         for (const intersectionId in intersections) {
-            const found = intersections[intersectionId].passThroughs.find(
+            const found = intersections[intersectionId]?.passThroughs?.find(
                 pass => pass.passIndex === selectedPassIndex
             );
             if (found) return found;
         }
-        return null;
+        return null; // Return null if not found
     }, [selectedPassIndex, intersections]);
 
-    // Effect to select the first pass-through by default when data loads
+    // Effect for selecting default pass and handling deselection
     useEffect(() => {
-        if (!loading && !error && selectedPassIndex === null && Object.keys(intersections).length > 0) {
-            const firstIntersectionId = Object.keys(intersections)[0];
+        const intersectionKeys = Object.keys(intersections);
+        // Select first pass by default if none is selected and data is loaded
+        if (!loading && !error && selectedPassIndex === null && intersectionKeys.length > 0) {
+            const firstIntersectionId = intersectionKeys[0];
             if (intersections[firstIntersectionId]?.passThroughs?.length > 0) {
                 setSelectedPassIndex(intersections[firstIntersectionId].passThroughs[0].passIndex);
             }
         }
-    }, [loading, error, intersections, selectedPassIndex]);
+        // Handle case where the previously selected pass might no longer exist (e.g., data refresh)
+        else if (!loading && !error && selectedPassIndex !== null && !selectedPass && intersectionKeys.length > 0) {
+            // Reset to the first available pass or null if none exist
+            const firstIntersectionId = intersectionKeys[0];
+            if (intersections[firstIntersectionId]?.passThroughs?.length > 0) {
+                setSelectedPassIndex(intersections[firstIntersectionId].passThroughs[0].passIndex);
+            } else {
+                setSelectedPassIndex(null); // No passes available at all
+            }
+        } else if (!loading && !error && intersectionKeys.length === 0) {
+            // Handle case where data loaded but is empty
+            setSelectedPassIndex(null);
+        }
+    }, [loading, error, intersections, selectedPassIndex, selectedPass]);
 
 
     const handleSelectPassThrough = (passIndex) => {
         setSelectedPassIndex(passIndex);
-        setActiveTab('overview'); // Reset to overview tab on new selection
+        setActiveTab('overview'); // Reset tab on new selection
     };
 
     // --- Render Logic ---
@@ -55,15 +73,16 @@ const GLOSADashboard = () => {
         return <ErrorDisplay message={error} />;
     }
 
-    if (!intersections || Object.keys(intersections).length === 0) {
-        return <NoDataDisplay />;
-    }
+    // Determine if there's any data to show
+    const hasIntersections = intersections && Object.keys(intersections).length > 0;
+    const hasPassThroughs = hasIntersections && Object.values(intersections).some(int => int.passThroughs?.length > 0);
 
     return (
-        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#f3f4f6' }}> {/* Full height, basic layout */}
+        // Top-level container using flexbox for Sidebar + Main Content layout
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#f3f4f6' }}>
 
-            {/* Left Sidebar */}
-            <div style={{ width: '350px', minWidth: '300px', borderRight: '1px solid #d1d5db', backgroundColor: 'white', display: 'flex', flexDirection: 'column' }}>
+            {/* Left Sidebar: Fixed width, non-shrinking */}
+            <div style={{ width: '350px', minWidth: '300px', borderRight: '1px solid #d1d5db', backgroundColor: 'white', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                 <IntersectionList
                     intersections={intersections}
                     selectedPassIndex={selectedPassIndex}
@@ -71,49 +90,47 @@ const GLOSADashboard = () => {
                 />
             </div>
 
-            {/* Main Content Area */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}> {/* Scrollable content */}
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px', color: '#111827', textAlign: 'center', borderBottom: '1px solid #e5e7eb', paddingBottom: '16px' }}>
+            {/* Main Content Area: Takes remaining space, internal flex column layout */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' /* Prevents this container from scrolling */ }}>
+                {/* Header: Fixed height */}
+                <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', padding: '20px 24px', color: '#111827', borderBottom: '1px solid #e5e7eb', flexShrink: 0, backgroundColor: 'white' }}>
                     GLOSA Analysis Dashboard
                 </h1>
 
-                {selectedPass ? (
-                    <>
-                        {/* Tabs */}
-                        <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', backgroundColor: 'white', borderRadius: '8px 8px 0 0', padding: '0 16px' }}>
-                            <TabButton
-                                label="Overview"
-                                isActive={activeTab === 'overview'}
-                                onClick={() => setActiveTab('overview')}
-                            />
-                            <TabButton
-                                label="GLOSA Analysis"
-                                isActive={activeTab === 'glosa'}
-                                onClick={() => setActiveTab('glosa')}
-                            />
-                            <TabButton
-                                label="Data Table"
-                                isActive={activeTab === 'data'}
-                                onClick={() => setActiveTab('data')}
-                            />
+                {/* Scrollable Content Area: Takes remaining vertical space, scrolls vertically */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+                    {!hasIntersections ? (
+                        <NoDataDisplay /> // Show no data if intersections object is empty/null
+                    ) : !hasPassThroughs ? (
+                        // Show message if intersections exist but have no pass-throughs
+                        <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                            <p style={{ fontSize: '16px', color: '#6b7280' }}>No pass-throughs recorded for the available intersections.</p>
                         </div>
+                    ) : selectedPass ? (
+                        // Render tabs and content if a pass-through is selected
+                        <>
+                            {/* Tabs Container */}
+                            <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', backgroundColor: 'white', borderRadius: '8px 8px 0 0', padding: '0 16px', flexShrink: 0 }}>
+                                <TabButton label="Overview" isActive={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
+                                <TabButton label="GLOSA Analysis" isActive={activeTab === 'glosa'} onClick={() => setActiveTab('glosa')} />
+                                <TabButton label="Data Table" isActive={activeTab === 'data'} onClick={() => setActiveTab('data')} />
+                            </div>
 
-                        {/* Tab content */}
-                        <div style={{ backgroundColor: 'white', borderRadius: '0 0 8px 8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)', padding: '24px' }}>
+                            {/* Render active tab content directly within the scrollable area */}
                             {activeTab === 'overview' && <OverviewTab passThrough={selectedPass} />}
                             {activeTab === 'glosa' && <GLOSAAnalysisTab passThrough={selectedPass} />}
+                            {/* DataTableTab needs to manage its own internal scrolling if necessary */}
                             {activeTab === 'data' && <DataTableTab passThrough={selectedPass} />}
+                        </>
+                    ) : (
+                        // Show prompt if there are pass-throughs but none are selected yet
+                        <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                            <p style={{ fontSize: '16px', color: '#6b7280' }}>Select a pass-through from the list to view details.</p>
                         </div>
-                    </>
-                ) : (
-                    <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-                        <p style={{ fontSize: '16px', color: '#6b7280' }}>
-                            {Object.keys(intersections).length > 0 ? 'Select a pass-through from the list to view details.' : 'No pass-through data found.'}
-                        </p>
-                    </div>
-                )}
-            </div>
-        </div>
+                    )}
+                </div> {/* End Scrollable Content Area */}
+            </div> {/* End Main Content Area */}
+        </div> // End Top Level Flex Container
     );
 };
 

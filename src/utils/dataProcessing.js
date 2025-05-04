@@ -15,7 +15,9 @@ export const calculateSignalGroupSummary = (metrics) => {
             distanceRange: { min: 0, max: 0 },
             speedRange: { min: 0, max: 0, avg: 0 },
             glosaAdvice: {},
-            clearanceTypes: {}
+            clearanceTypes: {},
+            // Add default for new summary field
+            greenIntervalChangesDetected: 0,
         };
     }
 
@@ -30,24 +32,29 @@ export const calculateSignalGroupSummary = (metrics) => {
             avg: metrics.reduce((sum, m) => sum + m.speed, 0) / metrics.length,
         },
         glosaAdvice: countOccurrences(metrics.filter(m => m.glosaAdvice).map(m => m.glosaAdvice)),
-        clearanceTypes: countOccurrences(metrics.filter(m => m.clearanceCalType).map(m => m.clearanceCalType))
+        clearanceTypes: countOccurrences(metrics.filter(m => m.clearanceCalType).map(m => m.clearanceCalType)),
+        // Count how many metrics detected a change from the previous one
+        greenIntervalChangesDetected: metrics.filter(m => m.greenIntervalChanged).length,
     };
 
     return summary;
 };
 
+// --- Updated processPassThrough with Green Interval Change Detection ---
 export const processPassThrough = (events, passIndex) => {
-    // Extract basic info from the pass-through
     const uuid = events[0]?.uuid || `pass-${passIndex}`;
-    const timestamp = new Date(events[0]?.dt);
+    const firstTimestamp = events[0]?.dt ? new Date(events[0].dt) : new Date();
 
-    // Extract all signal groups data across all events
     const signalGroupsData = {};
-
-    // Ensure we have at least one empty signal group if none found
     let foundAnySignalGroup = false;
+    let significantGreenIntervalChangeOccurred = false; // Flag for the entire pass
+    const previousSignalGroupGreenIntervals = {}; // Track previous { start, end, timestamp } per SG
 
-    events.forEach(event => {
+    // Sort events by timestamp to ensure sequential processing
+    const sortedEvents = [...events].sort((a, b) => new Date(a.dt) - new Date(b.dt));
+
+    sortedEvents.forEach((event, eventIndex) => {
+        const currentTimestamp = new Date(event.dt);
         if (!event.trafficLightsStatus?.signalGroup) return;
 
         event.trafficLightsStatus.signalGroup.forEach(sg => {
@@ -56,55 +63,57 @@ export const processPassThrough = (events, passIndex) => {
 
             foundAnySignalGroup = true;
 
-            // Initialize signal group if not exists
+            // Initialize signal group data if first time seeing it
             if (!signalGroupsData[sgName]) {
                 signalGroupsData[sgName] = {
                     name: sgName,
                     metrics: [],
                     hasMovementEvents: false,
-                    allMovementEventsUnavailable: true
+                    allMovementEventsUnavailable: true,
                 };
             }
 
-            // Check if this signal group has movement events
-            if (sg.movementEvent && sg.movementEvent.length > 0) {
+            // --- Movement Event Availability Check (as before) ---
+            const movementEventsRaw = sg.movementEvent || [];
+            if (movementEventsRaw.length > 0) {
                 signalGroupsData[sgName].hasMovementEvents = true;
-
-                // Check if at least one movement event is not "unavailable"
-                const hasAvailableMovementEvent = sg.movementEvent.some(
+                const hasAvailableMovementEvent = movementEventsRaw.some(
                     me => me.state && me.state !== "unavailable"
                 );
-
                 if (hasAvailableMovementEvent) {
                     signalGroupsData[sgName].allMovementEventsUnavailable = false;
                 }
             }
 
-            // Create metric for this event and signal group
+
+            // --- Prepare Metric Data ---
             const metric = {
-                timestamp: new Date(event.dt),
-                distance: event.intersectionPass?.intPassInfo?.distance || 0,
-                speed: event.posData?.sp?.value * 3.6 || 0, // Convert m/s to km/h
-                lat: event.posData?.geoPos?.lat || 0,
-                lng: event.posData?.geoPos?.lng || 0,
-                heading: event.posData?.head?.value || 0,
-                movementEventsAvailable: sg.movementEvent && sg.movementEvent.length > 0,
-                // Store movement events for display
-                movementEvents: sg.movementEvent ? sg.movementEvent.map(me => ({
+                timestamp: currentTimestamp,
+                distance: event.intersectionPass?.intPassInfo?.distance ?? 0,
+                speed: (event.posData?.sp?.value ?? 0) * 3.6,
+                lat: event.posData?.geoPos?.lat ?? 0,
+                lng: event.posData?.geoPos?.lng ?? 0,
+                heading: event.posData?.head?.value ?? 0,
+                movementEventsAvailable: signalGroupsData[sgName].hasMovementEvents && !signalGroupsData[sgName].allMovementEventsUnavailable,
+                movementEvents: movementEventsRaw.map(me => ({ // Keep detailed movement events for display
                     state: me.state || 'unknown',
                     startTime: me.startTime && me.startTime !== "1970-01-01T00:00:00Z" ? new Date(me.startTime) : null,
                     minEndTime: me.minEndTime ? new Date(me.minEndTime) : null,
                     maxEndTime: me.maxEndTime ? new Date(me.maxEndTime) : null,
-                    likelyTime: me.likelyTime ? new Date(me.likelyTime) : null,
+                    likelyTime: me.likelyTime && me.likelyTime !== "1970-01-01T00:00:00Z" ? new Date(me.likelyTime) : null,
                     nextTime: me.nextTime && me.nextTime !== "1970-01-01T00:00:00Z" ? new Date(me.nextTime) : null,
-                    timeConfidence: me.timeConfidence || null
-                })) : []
+                    timeConfidence: me.timeConfidence ?? null
+                })),
+                // Initialize change flag for this specific metric
+                greenIntervalChanged: false
             };
 
-            // Extract GLOSA data if available
+            // Extract GLOSA data and Green Interval
+            let currentGreenStart = null;
+            let currentGreenEnd = null;
             if (sg.glosa) {
                 metric.glosaAdvice = sg.glosa.advice || null;
-                metric.glosaSpeedKph = sg.glosa.speedKph !== null ? sg.glosa.speedKph : null; // Keep 0 if it's 0
+                metric.glosaSpeedKph = sg.glosa.speedKph !== null ? sg.glosa.speedKph : null;
                 metric.timeToGreen = sg.glosa.timeToGreen !== null ? sg.glosa.timeToGreen : null;
 
                 if (sg.glosa.internalInfo) {
@@ -115,83 +124,149 @@ export const processPassThrough = (events, passIndex) => {
                     metric.secondsToGreen = info.secondsToGreenStart || null;
                     metric.clearanceTime = info.clearanceTime || null;
                     metric.clearanceCalType = info.clearanceCalType || null;
-                    metric.greenStartTime = info.greenStartTime || null;
-                    metric.greenEndTime = info.greenEndTime || null;
+                    // Store these for comparison
+                    currentGreenStart = info.greenStartTime !== null ? Number(info.greenStartTime) : null;
+                    currentGreenEnd = info.greenEndTime !== null ? Number(info.greenEndTime) : null;
+                    metric.greenStartTime = currentGreenStart; // Also add to metric for display
+                    metric.greenEndTime = currentGreenEnd;     // Also add to metric for display
                 }
             }
 
+            // --- Green Interval Change Detection Logic ---
+            const previousIntervalData = previousSignalGroupGreenIntervals[sgName];
+
+            if (eventIndex > 0 && previousIntervalData) { // Can only compare if not the first event and previous data exists
+                const timeDiffSeconds = (currentTimestamp.getTime() - previousIntervalData.timestamp.getTime()) / 1000;
+                const bufferSeconds = 2.0;
+                // Threshold allows for time passage + buffer
+                const threshold = Math.max(0, timeDiffSeconds) + bufferSeconds; // Ensure threshold is non-negative
+
+                const prevStart = previousIntervalData.start;
+                const prevEnd = previousIntervalData.end;
+
+                let startChanged = false;
+                let endChanged = false;
+
+                // Check start time change
+                if (currentGreenStart === null && prevStart !== null) {
+                    startChanged = true; // Disappeared
+                } else if (currentGreenStart !== null && prevStart === null) {
+                    startChanged = true; // Appeared
+                } else if (currentGreenStart !== null && prevStart !== null) {
+                    if (Math.abs(currentGreenStart - prevStart) > threshold) {
+                        startChanged = true;
+                    }
+                }
+
+                // Check end time change
+                if (currentGreenEnd === null && prevEnd !== null) {
+                    endChanged = true; // Disappeared
+                } else if (currentGreenEnd !== null && prevEnd === null) {
+                    endChanged = true; // Appeared
+                } else if (currentGreenEnd !== null && prevEnd !== null) {
+                    if (Math.abs(currentGreenEnd - prevEnd) > threshold) {
+                        endChanged = true;
+                    }
+                }
+
+                if (startChanged || endChanged) {
+                    metric.greenIntervalChanged = true; // Mark this metric
+                    significantGreenIntervalChangeOccurred = true; // Mark the whole pass
+                    // Optional console log for debugging:
+                    // console.log(`Change detected for SG ${sgName} at ${currentTimestamp.toISOString()}`);
+                    // console.log(`  Prev: [${prevStart}, ${prevEnd}] @ ${previousIntervalData.timestamp.toISOString()}`);
+                    // console.log(`  Curr: [${currentGreenStart}, ${currentGreenEnd}] @ ${currentTimestamp.toISOString()}`);
+                    // console.log(`  Diff: ${timeDiffSeconds.toFixed(1)}s, Threshold: ${threshold.toFixed(1)}s`);
+                    // console.log(`  Start Changed: ${startChanged}, End Changed: ${endChanged}`);
+                }
+            }
+
+            // Store current interval data for the next comparison for this SG
+            // Only store if we actually have some interval data
+            if (currentGreenStart !== null || currentGreenEnd !== null) {
+                previousSignalGroupGreenIntervals[sgName] = {
+                    start: currentGreenStart,
+                    end: currentGreenEnd,
+                    timestamp: currentTimestamp
+                };
+            } else {
+                // If current interval is null, remove previous data to avoid false change detection on next non-null
+                delete previousSignalGroupGreenIntervals[sgName];
+            }
+
+
+            // Add the processed metric to the signal group
             signalGroupsData[sgName].metrics.push(metric);
         });
     });
 
-    // If no signal groups were found, create a default one
-    if (!foundAnySignalGroup && events.length > 0) {
+    // Handle case where no signal groups were found at all
+    if (!foundAnySignalGroup && sortedEvents.length > 0) {
         signalGroupsData['default'] = {
             name: 'No Signal Groups',
             metrics: [{
-                timestamp: timestamp,
-                distance: events[0].intersectionPass?.intPassInfo?.distance || 0,
-                speed: events[0].posData?.sp?.value * 3.6 || 0, // Convert m/s to km/h
+                timestamp: firstTimestamp,
+                distance: sortedEvents[0].intersectionPass?.intPassInfo?.distance ?? 0,
+                speed: (sortedEvents[0].posData?.sp?.value ?? 0) * 3.6,
                 movementEventsAvailable: false,
                 glosaAdvice: 'none',
-                movementEvents: [] // Empty movement events
+                movementEvents: [],
+                greenIntervalChanged: false, // Default for dummy metric
+                greenStartTime: null,
+                greenEndTime: null,
             }],
             hasMovementEvents: false,
             allMovementEventsUnavailable: true
         };
     }
 
-    // Calculate summary statistics for each signal group
+    // Calculate summary statistics for each signal group (will include change count)
     Object.values(signalGroupsData).forEach(sg => {
         sg.summary = calculateSignalGroupSummary(sg.metrics);
     });
 
-    // Calculate summary statistics for this pass
+    // Calculate overall summary for the pass, including the global change flag
     const summary = {
-        eventCount: events.length,
+        eventCount: sortedEvents.length,
         timeRange: {
-            start: events.length > 0 ? new Date(Math.min(...events.map(e => new Date(e.dt)))) : new Date(),
-            end: events.length > 0 ? new Date(Math.max(...events.map(e => new Date(e.dt)))) : new Date()
+            start: sortedEvents.length > 0 ? new Date(Math.min(...sortedEvents.map(e => new Date(e.dt)))) : new Date(),
+            end: sortedEvents.length > 0 ? new Date(Math.max(...sortedEvents.map(e => new Date(e.dt)))) : new Date()
         },
         anySignalGroupHasMovementEvents: Object.values(signalGroupsData).some(sg => sg.hasMovementEvents),
         allMovementEventsUnavailable: Object.values(signalGroupsData).every(sg =>
             !sg.hasMovementEvents || sg.allMovementEventsUnavailable
-        )
+        ),
+        // Add the new flag to the summary
+        significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred
     };
 
-    // Ensure signalGroups is always an object, even if empty
     const finalSignalGroups = Object.keys(signalGroupsData).length > 0 ? signalGroupsData : {};
 
     return {
         passIndex,
         uuid,
-        timestamp,
+        timestamp: firstTimestamp,
         signalGroups: finalSignalGroups,
-        summary
+        summary // Contains the new significantGreenIntervalChangeOccurred flag
     };
 };
 
+// --- processRawData (No changes needed here, it calls the updated processPassThrough) ---
 export const processRawData = (jsonData) => {
     const intersectionMap = {};
-
-    // Adapt based on whether jsonData is an array of passes or the structure from one.json
-    const passes = Array.isArray(jsonData) ? jsonData : [jsonData]; // Handle both array and single object
+    const passes = Array.isArray(jsonData) ? jsonData : [jsonData];
 
     passes.forEach((passData, passIndex) => {
-        // Check if passData itself has the 'events' structure or if it *is* the event structure
-        const events = passData.events || []; // Adjust if the structure varies
+        const events = passData.events || [];
         if (!events || events.length === 0) return;
 
-        // Get the first event to extract intersection info
         const firstEvent = events[0];
         const intersectionInfo = firstEvent.intersectionPass?.intersection;
-
         if (!intersectionInfo || !intersectionInfo.name) return;
 
         const intersectionName = intersectionInfo.name;
         const intersectionId = `${intersectionInfo.operatorId}-${intersectionInfo.intId}`;
 
-        // Initialize intersection if not exists
         if (!intersectionMap[intersectionId]) {
             intersectionMap[intersectionId] = {
                 id: intersectionId,
@@ -202,8 +277,8 @@ export const processRawData = (jsonData) => {
             };
         }
 
-        // Process the pass-through
-        const processedPass = processPassThrough(events, passIndex); // Pass the actual index
+        // Calls the *updated* processPassThrough
+        const processedPass = processPassThrough(events, passIndex);
         intersectionMap[intersectionId].passThroughs.push(processedPass);
     });
 
