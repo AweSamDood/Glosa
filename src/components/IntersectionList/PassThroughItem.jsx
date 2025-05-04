@@ -10,21 +10,28 @@ const ChangeIndicatorIcon = ({ title }) => (
     </svg>
 );
 
+// New icon for no-green warning
+const NoGreenWarningIcon = ({ title }) => (
+    <svg title={title} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style={{ width: '12px', height: '12px', color: '#dc2626' /* Red */ }}>
+        <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm9-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM6.75 9.75a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z" clipRule="evenodd" />
+    </svg>
+);
 
 const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
     // Default values for safety
     const summary = passThrough.summary || {
         anySignalGroupHasMovementEvents: false,
         allMovementEventsUnavailable: true,
-        significantGreenIntervalChangeOccurred: false // Default for new flag
+        significantGreenIntervalChangeOccurred: false,
+        hasNoPredictedGreensWithAvailableEvents: false // New flag
     };
     const signalGroups = passThrough.signalGroups || {};
     const timestamp = passThrough.timestamp || new Date();
     const uuid = passThrough.uuid || 'unknown-uuid';
 
     const hasMovementEvents = summary.anySignalGroupHasMovementEvents;
-    // Use the specific flag for green interval changes
     const greenIntervalChanged = summary.significantGreenIntervalChangeOccurred;
+    const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents;
     const signalGroupCount = Object.keys(signalGroups).length;
     const time = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); // Format time
 
@@ -75,7 +82,11 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                 <div style={{ fontSize: '12px', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
                     {signalGroupCount} SG{signalGroupCount !== 1 ? 's' : ''}
                 </div>
-                {/* Green Interval Change Indicator (if applicable) */}
+                {/* No Green Warning Indicator */}
+                {hasNoGreenWarning && (
+                    <NoGreenWarningIcon title="Available movement events but no green phase detected during pass" />
+                )}
+                {/* Green Interval Change Indicator */}
                 {greenIntervalChanged && (
                     <ChangeIndicatorIcon title="Significant green interval change detected during pass" />
                 )}

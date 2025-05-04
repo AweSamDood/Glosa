@@ -219,13 +219,50 @@ export const processPassThrough = (events, passIndex) => {
             allMovementEventsUnavailable: true
         };
     }
+    // Analyze the last message to predict which signal groups were used for passage
+    const predictedSignalGroupsUsed = [];
+    if (sortedEvents.length > 0) {
+        const lastEvent = sortedEvents[sortedEvents.length - 1];
+
+        if (lastEvent.trafficLightsStatus?.signalGroup) {
+            lastEvent.trafficLightsStatus.signalGroup.forEach(sg => {
+                const sgName = sg.name;
+                if (!sgName) return;
+
+                // Only check if the green interval timing has greenStartTime = 0 (meaning green now)
+                const greenStartTime = sg.glosa?.internalInfo?.greenStartTime;
+                const greenEndTime = sg.glosa?.internalInfo?.greenEndTime;
+
+                const hasCurrentGreen = (
+                    greenStartTime !== null &&
+                    greenEndTime !== null &&
+                    greenStartTime === 0 &&
+                    greenEndTime > 0
+                );
+
+                if (hasCurrentGreen) {
+                    predictedSignalGroupsUsed.push({
+                        signalGroup: sgName,
+                        reason: `Green phase active (interval: [0, ${greenEndTime}])`
+                    });
+                }
+            });
+        }
+    }
+    // Check if all signal groups have available movement events but no green prediction
+    const allSignalGroupsHaveAvailableEvents = Object.values(signalGroupsData).every(sg =>
+        sg.hasMovementEvents && !sg.allMovementEventsUnavailable
+    );
+
+    const hasNoPredictedGreensWithAvailableEvents = allSignalGroupsHaveAvailableEvents &&
+        predictedSignalGroupsUsed.length === 0 &&
+        Object.keys(signalGroupsData).length > 0;
 
     // Calculate summary statistics for each signal group (will include change count)
     Object.values(signalGroupsData).forEach(sg => {
         sg.summary = calculateSignalGroupSummary(sg.metrics);
     });
 
-    // Calculate overall summary for the pass, including the global change flag
     const summary = {
         eventCount: sortedEvents.length,
         timeRange: {
@@ -236,8 +273,10 @@ export const processPassThrough = (events, passIndex) => {
         allMovementEventsUnavailable: Object.values(signalGroupsData).every(sg =>
             !sg.hasMovementEvents || sg.allMovementEventsUnavailable
         ),
-        // Add the new flag to the summary
-        significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred
+        significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred,
+        predictedSignalGroupsUsed: predictedSignalGroupsUsed,
+        // Add this new flag
+        hasNoPredictedGreensWithAvailableEvents: hasNoPredictedGreensWithAvailableEvents
     };
 
     const finalSignalGroups = Object.keys(signalGroupsData).length > 0 ? signalGroupsData : {};
@@ -281,8 +320,9 @@ export const calculateIntersectionSummary = (intersection) => {
     const allMetrics = [];
     const distanceBuckets = new Map(); // For identifying common stopping distances
     const speedsBySGAndDistance = new Map(); // Key: "signalGroup-distanceRange", Value: [speeds]
+    const passThroughStops = new Map(); // Track stops per pass-through: Key: "passIndex-distanceBucket", Value: [{ signalGroups, timestamp }]
 
-    passThroughs.forEach(passThrough => {
+    passThroughs.forEach((passThrough, passIndex) => {
         // Count green interval changes
         if (passThrough.summary?.significantGreenIntervalChangeOccurred) {
             summary.greenIntervalChanges++;
@@ -334,15 +374,28 @@ export const calculateIntersectionSummary = (intersection) => {
                 // Detect potential stops (speed < 2 km/h)
                 if (metric.speed < 2) {
                     const distanceBucket = Math.round(metric.distance / 5) * 5; // 5m buckets
-                    const key = `${sgName}-${distanceBucket}`;
+                    const passStopKey = `${passIndex}-${distanceBucket}`;
 
-                    if (!distanceBuckets.has(key)) {
-                        distanceBuckets.set(key, []);
+                    // Track unique stops per pass-through
+                    if (!passThroughStops.has(passStopKey)) {
+                        passThroughStops.set(passStopKey, {
+                            signalGroups: new Set(),
+                            timestamp: metric.timestamp,
+                            distance: metric.distance
+                        });
                     }
-                    distanceBuckets.get(key).push({
+                    passThroughStops.get(passStopKey).signalGroups.add(sgName);
+
+                    // Also track by signal group for pattern analysis
+                    const sgKey = `${sgName}-${distanceBucket}`;
+                    if (!distanceBuckets.has(sgKey)) {
+                        distanceBuckets.set(sgKey, []);
+                    }
+                    distanceBuckets.get(sgKey).push({
                         distance: metric.distance,
                         timestamp: metric.timestamp,
-                        signalGroup: sgName
+                        signalGroup: sgName,
+                        passIndex
                     });
                 }
 
@@ -365,16 +418,35 @@ export const calculateIntersectionSummary = (intersection) => {
         });
     });
 
-    // Analyze stop locations for patterns
-    distanceBuckets.forEach((stops, key) => {
-        if (stops.length >= Math.max(2, passThroughs.length * 0.3)) { // At least 30% of passes or 2
-            const [signalGroup, distanceBucket] = key.split('-');
+    // Analyze stop locations for patterns - Count unique stops per distance bucket
+    const stopsByDistance = new Map(); // Key: distanceBucket, Value: Set of passIndexes
+    passThroughStops.forEach((stopInfo, key) => {
+        const [passIndex, distanceBucket] = key.split('-');
+
+        if (!stopsByDistance.has(distanceBucket)) {
+            stopsByDistance.set(distanceBucket, {
+                passes: new Set(),
+                signalGroups: new Set(),
+                distances: []
+            });
+        }
+
+        const bucketInfo = stopsByDistance.get(distanceBucket);
+        bucketInfo.passes.add(passIndex);
+        stopInfo.signalGroups.forEach(sg => bucketInfo.signalGroups.add(sg));
+        bucketInfo.distances.push(stopInfo.distance);
+    });
+
+    // Create stop locations with proper percentage calculation
+    stopsByDistance.forEach((info, distanceBucket) => {
+        const uniqueStopCount = info.passes.size;
+        if (uniqueStopCount >= Math.max(2, passThroughs.length * 0.3)) { // At least 30% of passes or 2
             summary.stopLocations.push({
-                signalGroup,
+                signalGroup: Array.from(info.signalGroups).join(', '),
                 distanceRange: `${distanceBucket}-${parseInt(distanceBucket) + 5}m`,
-                occurrences: stops.length,
-                percentage: (stops.length / passThroughs.length * 100).toFixed(1),
-                averageDistance: stops.reduce((sum, s) => sum + s.distance, 0) / stops.length
+                occurrences: uniqueStopCount,
+                percentage: (uniqueStopCount / passThroughs.length * 100).toFixed(1),
+                averageDistance: info.distances.reduce((sum, d) => sum + d, 0) / info.distances.length
             });
         }
     });
@@ -411,6 +483,9 @@ export const calculateIntersectionSummary = (intersection) => {
     return summary;
 };
 
+
+
+// Add this to processRawData function after creating intersectionMap
 export const processRawData = (jsonData) => {
     const intersectionMap = {};
     const passes = Array.isArray(jsonData) ? jsonData : [jsonData];

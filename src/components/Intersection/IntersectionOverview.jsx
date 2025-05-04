@@ -150,24 +150,40 @@ const IntersectionOverview = ({ intersection }) => {
             {/* GLOSA Advice Distribution */}
             {glosaAdviceData.length > 0 && (
                 <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Distribution</h3>
-                    <div style={{ height: '400px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={glosaAdviceData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis
-                                    dataKey="advice"
-                                    angle={-45}
-                                    textAnchor="end"
-                                    height={100}
-                                    interval={0}
-                                />
-                                <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="count" fill="#3b82f6" name="Occurrences" />
-                            </BarChart>
-                        </ResponsiveContainer>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Distribution by Signal Group</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+                        {Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => {
+                            const sgGlosaData = Object.entries(data.glosaAdviceStats || {}).map(([advice, count]) => ({
+                                advice,
+                                count
+                            }));
+
+                            if (sgGlosaData.length === 0) return null;
+
+                            return (
+                                <div key={sgName} style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+                                    <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>{sgName}</h4>
+                                    <div style={{ height: '300px' }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={sgGlosaData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis
+                                                    dataKey="advice"
+                                                    angle={-45}
+                                                    textAnchor="end"
+                                                    height={100}
+                                                    interval={0}
+                                                    fontSize={12}
+                                                />
+                                                <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
+                                                <Tooltip />
+                                                <Bar dataKey="count" fill="#3b82f6" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}

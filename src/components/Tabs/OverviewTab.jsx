@@ -1,6 +1,6 @@
 // src/components/Tabs/OverviewTab.jsx
 import React from 'react';
-import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx"; // Ensure path is correct
+import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx";
 
 // Icon for stability status
 const StabilityIcon = ({ stable, size = 16 }) => {
@@ -19,7 +19,6 @@ const StabilityIcon = ({ stable, size = 16 }) => {
 };
 
 const OverviewTab = ({ passThrough }) => {
-    // Safely access summary data with defaults
     const summary = passThrough.summary || {};
     const uuid = passThrough.uuid || 'N/A';
     const timestamp = passThrough.timestamp ? passThrough.timestamp.toLocaleString() : 'N/A';
@@ -32,15 +31,14 @@ const OverviewTab = ({ passThrough }) => {
     const movementEventsStatus = hasMovementEvents
         ? (summary.allMovementEventsUnavailable ? 'Present (Unavailable)' : 'Available')
         : 'None Found';
-    // Get the green interval change status
     const greenIntervalStable = !(summary.significantGreenIntervalChangeOccurred ?? false);
-
+    const predictedSignalGroups = summary.predictedSignalGroupsUsed || [];
+    const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents || false;
 
     return (
         <div>
             <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
                 <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Pass-Through Summary</h2>
-                {/* Use a grid or flexbox for better alignment */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', alignItems: 'center' }}>
                     <span style={{ fontWeight: '500' }}>UUID:</span> <span>{uuid}</span>
                     <span style={{ fontWeight: '500' }}>Timestamp:</span> <span>{timestamp}</span>
@@ -48,7 +46,6 @@ const OverviewTab = ({ passThrough }) => {
                     <span style={{ fontWeight: '500' }}>Duration:</span> <span>{duration} seconds</span>
                     <span style={{ fontWeight: '500' }}>Signal groups:</span> <span>{signalGroupCount}</span>
                     <span style={{ fontWeight: '500' }}>Movement events:</span> <span>{movementEventsStatus}</span>
-                    {/* New line for Green Interval Stability */}
                     <span style={{ fontWeight: '500' }}>Green Interval Stability:</span>
                     <span>
                         {greenIntervalStable ? 'Stable' : 'Changed'}
@@ -57,10 +54,72 @@ const OverviewTab = ({ passThrough }) => {
                 </div>
             </div>
 
+            {/* No Green Warning */}
+            {hasNoGreenWarning && (
+                <div style={{
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '24px', height: '24px', color: '#dc2626' }}>
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.515 2.625H3.72c-1.345 0-2.188-1.458-1.515-2.625l6.28-10.875ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                        <div style={{ fontWeight: '600', color: '#dc2626', marginBottom: '4px' }}>
+                            No Green Phase Detected
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#991b1b' }}>
+                            All signal groups have available movement events, but no signal group had a green phase (greenStartTime = 0) at the time of passing. This may indicate the vehicle passed during a red phase or there was a timing issue.
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Predicted Signal Groups Used */}
+            {predictedSignalGroups.length > 0 && (
+                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Predicted Signal Groups Used for Passage</h2>
+                    <p style={{ marginBottom: '12px', color: '#4b5563' }}>
+                        Based on the last message of this pass-through, the following signal groups were likely used to pass the intersection:
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                        {predictedSignalGroups.map((prediction, index) => (
+                            <div key={index} style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '12px' }}>
+                                <div style={{ fontWeight: '600', color: '#15803d', marginBottom: '4px' }}>
+                                    {prediction.signalGroup}
+                                </div>
+                                <div style={{ fontSize: '14px', color: '#166534' }}>
+                                    {prediction.reason}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* No Green Prediction but with Available Events - Empty Prediction List */}
+            {predictedSignalGroups.length === 0 && hasNoGreenWarning && (
+                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Predicted Signal Groups Used for Passage</h2>
+                    <div style={{ backgroundColor: '#fff7ed', border: '1px solid #ffedd5', borderRadius: '8px', padding: '16px' }}>
+                        <p style={{ color: '#9a3412', fontWeight: '500' }}>
+                            No signal groups were predicted to be used for passage.
+                        </p>
+                        <p style={{ color: '#9a3412', fontSize: '14px', marginTop: '8px' }}>
+                            Despite all signal groups having available movement events, none showed a current green phase (greenStartTime = 0) in the last message.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {passThrough.signalGroups && Object.keys(passThrough.signalGroups).length > 0 ? (
                 <>
                     <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Signal Group Analysis</h2>
-                    {/* Render SignalGroupOverview for each signal group */}
                     {Object.values(passThrough.signalGroups).map(signalGroup => (
                         <SignalGroupOverview key={signalGroup.name} signalGroup={signalGroup} />
                     ))}
