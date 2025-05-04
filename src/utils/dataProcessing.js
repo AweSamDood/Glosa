@@ -251,7 +251,166 @@ export const processPassThrough = (events, passIndex) => {
     };
 };
 
-// --- processRawData (No changes needed here, it calls the updated processPassThrough) ---
+export const calculateIntersectionSummary = (intersection) => {
+    if (!intersection || !intersection.passThroughs || intersection.passThroughs.length === 0) {
+        return {
+            totalPassThroughs: 0,
+            timeRange: { start: null, end: null },
+            distancePatterns: [],
+            speedPatterns: [],
+            stopLocations: [],
+            signalGroupAnalysis: {}
+        };
+    }
+
+    const passThroughs = intersection.passThroughs;
+    const summary = {
+        totalPassThroughs: passThroughs.length,
+        timeRange: {
+            start: new Date(Math.min(...passThroughs.map(p => p.timestamp.getTime()))),
+            end: new Date(Math.max(...passThroughs.map(p => p.timestamp.getTime())))
+        },
+        signalGroupAnalysis: {},
+        distancePatterns: [],
+        speedPatterns: [],
+        stopLocations: [],
+        greenIntervalChanges: 0
+    };
+
+    // Analyze patterns across all pass-throughs
+    const allMetrics = [];
+    const distanceBuckets = new Map(); // For identifying common stopping distances
+    const speedsBySGAndDistance = new Map(); // Key: "signalGroup-distanceRange", Value: [speeds]
+
+    passThroughs.forEach(passThrough => {
+        // Count green interval changes
+        if (passThrough.summary?.significantGreenIntervalChangeOccurred) {
+            summary.greenIntervalChanges++;
+        }
+
+        Object.entries(passThrough.signalGroups || {}).forEach(([sgName, sgData]) => {
+            if (!summary.signalGroupAnalysis[sgName]) {
+                summary.signalGroupAnalysis[sgName] = {
+                    totalOccurrences: 0,
+                    glosaAdviceStats: {},
+                    movementEventAvailability: { available: 0, unavailable: 0, none: 0 },
+                    distanceRange: { min: Infinity, max: -Infinity },
+                    speedRange: { min: Infinity, max: -Infinity },
+                    greenIntervalChanges: 0
+                };
+            }
+
+            const sgAnalysis = summary.signalGroupAnalysis[sgName];
+            sgAnalysis.totalOccurrences++;
+
+            // Track movement event availability
+            if (sgData.hasMovementEvents) {
+                if (sgData.allMovementEventsUnavailable) {
+                    sgAnalysis.movementEventAvailability.unavailable++;
+                } else {
+                    sgAnalysis.movementEventAvailability.available++;
+                }
+            } else {
+                sgAnalysis.movementEventAvailability.none++;
+            }
+
+            // Analyze metrics
+            sgData.metrics.forEach(metric => {
+                allMetrics.push({ ...metric, signalGroup: sgName });
+
+                // Update distance range
+                sgAnalysis.distanceRange.min = Math.min(sgAnalysis.distanceRange.min, metric.distance);
+                sgAnalysis.distanceRange.max = Math.max(sgAnalysis.distanceRange.max, metric.distance);
+
+                // Update speed range
+                sgAnalysis.speedRange.min = Math.min(sgAnalysis.speedRange.min, metric.speed);
+                sgAnalysis.speedRange.max = Math.max(sgAnalysis.speedRange.max, metric.speed);
+
+                // Count green interval changes
+                if (metric.greenIntervalChanged) {
+                    sgAnalysis.greenIntervalChanges++;
+                }
+
+                // Detect potential stops (speed < 2 km/h)
+                if (metric.speed < 2) {
+                    const distanceBucket = Math.round(metric.distance / 5) * 5; // 5m buckets
+                    const key = `${sgName}-${distanceBucket}`;
+
+                    if (!distanceBuckets.has(key)) {
+                        distanceBuckets.set(key, []);
+                    }
+                    distanceBuckets.get(key).push({
+                        distance: metric.distance,
+                        timestamp: metric.timestamp,
+                        signalGroup: sgName
+                    });
+                }
+
+                // Track speeds by distance ranges
+                const distanceRange = Math.floor(metric.distance / 10) * 10; // 10m ranges
+                const speedKey = `${sgName}-${distanceRange}`;
+                if (!speedsBySGAndDistance.has(speedKey)) {
+                    speedsBySGAndDistance.set(speedKey, []);
+                }
+                speedsBySGAndDistance.get(speedKey).push(metric.speed);
+            });
+
+            // Aggregate GLOSA advice
+            Object.entries(sgData.summary.glosaAdvice || {}).forEach(([advice, count]) => {
+                if (!sgAnalysis.glosaAdviceStats[advice]) {
+                    sgAnalysis.glosaAdviceStats[advice] = 0;
+                }
+                sgAnalysis.glosaAdviceStats[advice] += count;
+            });
+        });
+    });
+
+    // Analyze stop locations for patterns
+    distanceBuckets.forEach((stops, key) => {
+        if (stops.length >= Math.max(2, passThroughs.length * 0.3)) { // At least 30% of passes or 2
+            const [signalGroup, distanceBucket] = key.split('-');
+            summary.stopLocations.push({
+                signalGroup,
+                distanceRange: `${distanceBucket}-${parseInt(distanceBucket) + 5}m`,
+                occurrences: stops.length,
+                percentage: (stops.length / passThroughs.length * 100).toFixed(1),
+                averageDistance: stops.reduce((sum, s) => sum + s.distance, 0) / stops.length
+            });
+        }
+    });
+
+    // Sort stop locations by distance
+    summary.stopLocations.sort((a, b) =>
+        parseFloat(a.averageDistance) - parseFloat(b.averageDistance)
+    );
+
+    // Analyze speed patterns by distance
+    speedsBySGAndDistance.forEach((speeds, key) => {
+        if (speeds.length >= 2) {
+            const [signalGroup, distanceRange] = key.split('-');
+            const avgSpeed = speeds.reduce((sum, s) => sum + s, 0) / speeds.length;
+            const minSpeed = Math.min(...speeds);
+            const maxSpeed = Math.max(...speeds);
+
+            summary.speedPatterns.push({
+                signalGroup,
+                distanceRange: `${distanceRange}-${parseInt(distanceRange) + 10}m`,
+                averageSpeed: avgSpeed,
+                minSpeed,
+                maxSpeed,
+                samples: speeds.length
+            });
+        }
+    });
+
+    // Sort speed patterns by distance
+    summary.speedPatterns.sort((a, b) =>
+        parseInt(a.distanceRange) - parseInt(b.distanceRange)
+    );
+
+    return summary;
+};
+
 export const processRawData = (jsonData) => {
     const intersectionMap = {};
     const passes = Array.isArray(jsonData) ? jsonData : [jsonData];
@@ -277,9 +436,13 @@ export const processRawData = (jsonData) => {
             };
         }
 
-        // Calls the *updated* processPassThrough
         const processedPass = processPassThrough(events, passIndex);
         intersectionMap[intersectionId].passThroughs.push(processedPass);
+    });
+
+    // Calculate intersection summaries
+    Object.values(intersectionMap).forEach(intersection => {
+        intersection.summary = calculateIntersectionSummary(intersection);
     });
 
     return intersectionMap;

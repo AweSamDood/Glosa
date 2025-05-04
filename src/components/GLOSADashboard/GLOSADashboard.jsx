@@ -1,6 +1,4 @@
 // src/components/GLOSADashboard/GLOSADashboard.jsx
-// (No changes from the previous version)
-
 import { useState, useEffect, useMemo } from 'react';
 import { useGlosaData } from '../../hooks/useGlosaData';
 import LoadingIndicator from '../Common/LoadingIndicator';
@@ -11,11 +9,12 @@ import TabButton from '../Common/TabButton';
 import OverviewTab from '../Tabs/OverviewTab';
 import GLOSAAnalysisTab from '../Tabs/GLOSAAnalysisTab';
 import DataTableTab from '../Tabs/DataTableTab';
+import IntersectionTab from '../Tabs/IntersectionTab';
 
 const GLOSADashboard = () => {
     const { intersections, loading, error } = useGlosaData();
     const [selectedPassIndex, setSelectedPassIndex] = useState(null);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('intersection'); // Changed default to 'intersection'
 
     // Memoize finding the selected pass-through object
     const selectedPass = useMemo(() => {
@@ -30,6 +29,24 @@ const GLOSADashboard = () => {
             if (found) return found;
         }
         return null; // Return null if not found
+    }, [selectedPassIndex, intersections]);
+
+    // Find the intersection containing the selected pass
+    const selectedIntersection = useMemo(() => {
+        if (selectedPassIndex === null || !intersections) {
+            // If no pass selected, return the first intersection
+            const intersectionIds = Object.keys(intersections);
+            return intersectionIds.length > 0 ? intersections[intersectionIds[0]] : null;
+        }
+        // Find intersection containing the selected pass
+        for (const intersectionId in intersections) {
+            const intersection = intersections[intersectionId];
+            const hasPass = intersection?.passThroughs?.some(
+                pass => pass.passIndex === selectedPassIndex
+            );
+            if (hasPass) return intersection;
+        }
+        return null;
     }, [selectedPassIndex, intersections]);
 
     // Effect for selecting default pass and handling deselection
@@ -60,7 +77,7 @@ const GLOSADashboard = () => {
 
     const handleSelectPassThrough = (passIndex) => {
         setSelectedPassIndex(passIndex);
-        setActiveTab('overview'); // Reset tab on new selection
+        // Don't change tab when selecting a pass-through
     };
 
     // --- Render Logic ---
@@ -106,27 +123,30 @@ const GLOSADashboard = () => {
                         <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
                             <p style={{ fontSize: '16px', color: '#6b7280' }}>No pass-throughs recorded for the available intersections.</p>
                         </div>
-                    ) : selectedPass ? (
-                        // Render tabs and content if a pass-through is selected
+                    ) : (
+                        // Render tabs and content
                         <>
                             {/* Tabs Container */}
                             <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', backgroundColor: 'white', borderRadius: '8px 8px 0 0', padding: '0 16px', flexShrink: 0 }}>
-                                <TabButton label="Overview" isActive={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
+                                <TabButton label="Intersection" isActive={activeTab === 'intersection'} onClick={() => setActiveTab('intersection')} />
+                                <TabButton label="Pass Overview" isActive={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
                                 <TabButton label="GLOSA Analysis" isActive={activeTab === 'glosa'} onClick={() => setActiveTab('glosa')} />
                                 <TabButton label="Data Table" isActive={activeTab === 'data'} onClick={() => setActiveTab('data')} />
                             </div>
 
-                            {/* Render active tab content directly within the scrollable area */}
-                            {/* The active tab component itself now controls its content layout */}
-                            {activeTab === 'overview' && <OverviewTab passThrough={selectedPass} />}
-                            {activeTab === 'glosa' && <GLOSAAnalysisTab passThrough={selectedPass} />}
-                            {activeTab === 'data' && <DataTableTab passThrough={selectedPass} />}
+                            {/* Render active tab content */}
+                            {activeTab === 'intersection' && <IntersectionTab intersection={selectedIntersection} />}
+                            {activeTab === 'overview' && selectedPass && <OverviewTab passThrough={selectedPass} />}
+                            {activeTab === 'glosa' && selectedPass && <GLOSAAnalysisTab passThrough={selectedPass} />}
+                            {activeTab === 'data' && selectedPass && <DataTableTab passThrough={selectedPass} />}
+
+                            {/* Show message if pass-through is needed but not selected */}
+                            {(activeTab !== 'intersection' && !selectedPass) && (
+                                <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                                    <p style={{ fontSize: '16px', color: '#6b7280' }}>Select a pass-through from the list to view details.</p>
+                                </div>
+                            )}
                         </>
-                    ) : (
-                        // Show prompt if there are pass-throughs but none are selected yet
-                        <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-                            <p style={{ fontSize: '16px', color: '#6b7280' }}>Select a pass-through from the list to view details.</p>
-                        </div>
                     )}
                 </div> {/* End Scrollable Content Area */}
             </div> {/* End Main Content Area */}
