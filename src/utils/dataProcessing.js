@@ -219,17 +219,24 @@ export const processPassThrough = (events, passIndex) => {
             allMovementEventsUnavailable: true
         };
     }
-    // Analyze the last message to predict which signal groups were used for passage
+    // Analyze the last 3 messages to predict which signal groups were used for passage
     const predictedSignalGroupsUsed = [];
-    if (sortedEvents.length > 0) {
-        const lastEvent = sortedEvents[sortedEvents.length - 1];
+    const greenFoundInRecentEvents = {}; // Track which signal groups had green in last 3 events
 
-        if (lastEvent.trafficLightsStatus?.signalGroup) {
-            lastEvent.trafficLightsStatus.signalGroup.forEach(sg => {
+    // Check up to last 3 events
+    const eventsToCheck = Math.min(3, sortedEvents.length);
+    let foundGreenInLastEvent = false;
+    let foundGreenInPreviousEvents = false;
+
+    for (let i = 0; i < eventsToCheck; i++) {
+        const eventIndex = sortedEvents.length - 1 - i;
+        const event = sortedEvents[eventIndex];
+
+        if (event.trafficLightsStatus?.signalGroup) {
+            event.trafficLightsStatus.signalGroup.forEach(sg => {
                 const sgName = sg.name;
                 if (!sgName) return;
 
-                // Only check if the green interval timing has greenStartTime = 0 (meaning green now)
                 const greenStartTime = sg.glosa?.internalInfo?.greenStartTime;
                 const greenEndTime = sg.glosa?.internalInfo?.greenEndTime;
 
@@ -241,15 +248,30 @@ export const processPassThrough = (events, passIndex) => {
                 );
 
                 if (hasCurrentGreen) {
-                    predictedSignalGroupsUsed.push({
-                        signalGroup: sgName,
-                        reason: `Green phase active (interval: [0, ${greenEndTime}])`
-                    });
+                    if (!greenFoundInRecentEvents[sgName]) {
+                        greenFoundInRecentEvents[sgName] = {
+                            foundInEvents: [],
+                            lastGreenInterval: [greenStartTime, greenEndTime]
+                        };
+                    }
+                    greenFoundInRecentEvents[sgName].foundInEvents.push(eventsToCheck - i);
+
+                    // If this is the last event (i === 0), add to predictions
+                    if (i === 0) {
+                        predictedSignalGroupsUsed.push({
+                            signalGroup: sgName,
+                            reason: `Green phase active (interval: [0, ${greenEndTime}])`
+                        });
+                        foundGreenInLastEvent = true;
+                    } else {
+                        foundGreenInPreviousEvents = true;
+                    }
                 }
             });
         }
     }
-    // Check if all signal groups have available movement events but no green prediction
+
+    // Determine the warning level
     const allSignalGroupsHaveAvailableEvents = Object.values(signalGroupsData).every(sg =>
         sg.hasMovementEvents && !sg.allMovementEventsUnavailable
     );
@@ -258,11 +280,11 @@ export const processPassThrough = (events, passIndex) => {
         predictedSignalGroupsUsed.length === 0 &&
         Object.keys(signalGroupsData).length > 0;
 
-    // Calculate summary statistics for each signal group (will include change count)
-    Object.values(signalGroupsData).forEach(sg => {
-        sg.summary = calculateSignalGroupSummary(sg.metrics);
-    });
 
+    // New flag to indicate possible GPS mismatch
+    const possibleGPSMismatch = hasNoPredictedGreensWithAvailableEvents && foundGreenInPreviousEvents;
+
+    // Update the summary object
     const summary = {
         eventCount: sortedEvents.length,
         timeRange: {
@@ -275,9 +297,16 @@ export const processPassThrough = (events, passIndex) => {
         ),
         significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred,
         predictedSignalGroupsUsed: predictedSignalGroupsUsed,
-        // Add this new flag
-        hasNoPredictedGreensWithAvailableEvents: hasNoPredictedGreensWithAvailableEvents
+        hasNoPredictedGreensWithAvailableEvents: hasNoPredictedGreensWithAvailableEvents,
+        // Add new flags
+        greenFoundInRecentEvents: greenFoundInRecentEvents,
+        possibleGPSMismatch: possibleGPSMismatch
     };
+
+    // Calculate summary statistics for each signal group (will include change count)
+    Object.values(signalGroupsData).forEach(sg => {
+        sg.summary = calculateSignalGroupSummary(sg.metrics);
+    });
 
     const finalSignalGroups = Object.keys(signalGroupsData).length > 0 ? signalGroupsData : {};
 

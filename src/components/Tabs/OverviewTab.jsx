@@ -34,6 +34,8 @@ const OverviewTab = ({ passThrough }) => {
     const greenIntervalStable = !(summary.significantGreenIntervalChangeOccurred ?? false);
     const predictedSignalGroups = summary.predictedSignalGroupsUsed || [];
     const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents || false;
+    const possibleGPSMismatch = summary.possibleGPSMismatch || false;
+    const greenFoundInRecentEvents = summary.greenFoundInRecentEvents || {};
 
     return (
         <div>
@@ -54,8 +56,44 @@ const OverviewTab = ({ passThrough }) => {
                 </div>
             </div>
 
-            {/* No Green Warning */}
-            {hasNoGreenWarning && (
+            {/* GPS Mismatch Warning */}
+            {possibleGPSMismatch && (
+                <div style={{
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fef3c7',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '24px', height: '24px', color: '#f59e0b' }}>
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.515 2.625H3.72c-1.345 0-2.188-1.458-1.515-2.625l6.28-10.875ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                        <div style={{ fontWeight: '600', color: '#d97706', marginBottom: '4px' }}>
+                            Possible GPS Positioning Issue
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#92400e' }}>
+                            Green phases were detected in previous events but not in the last event. This may indicate GPS positioning inaccuracy causing the system to think the vehicle is already within the intersection when it may not be.
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#92400e', marginTop: '8px' }}>
+                            <strong>Green phases found in recent events:</strong>
+                            <ul style={{ marginTop: '4px', marginLeft: '20px' }}>
+                                {Object.entries(greenFoundInRecentEvents).map(([sgName, data]) => (
+                                    <li key={sgName}>
+                                        {sgName}: in event(s) #{data.foundInEvents.join(', #')} from the end
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* No Green Warning - only show if not GPS mismatch */}
+            {hasNoGreenWarning && !possibleGPSMismatch && (
                 <div style={{
                     backgroundColor: '#fef2f2',
                     border: '1px solid #fecaca',
@@ -74,7 +112,7 @@ const OverviewTab = ({ passThrough }) => {
                             No Green Phase Detected
                         </div>
                         <div style={{ fontSize: '14px', color: '#991b1b' }}>
-                            All signal groups have available movement events, but no signal group had a green phase (greenStartTime = 0) at the time of passing. This may indicate the vehicle passed during a red phase or there was a timing issue.
+                            All signal groups have available movement events, but no signal group had a green phase (greenStartTime = 0) in any of the last 3 events. This may indicate the vehicle passed during a red phase.
                         </div>
                     </div>
                 </div>
@@ -102,16 +140,23 @@ const OverviewTab = ({ passThrough }) => {
                 </div>
             )}
 
-            {/* No Green Prediction but with Available Events - Empty Prediction List */}
+            {/* No Green Prediction with additional context */}
             {predictedSignalGroups.length === 0 && hasNoGreenWarning && (
                 <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Predicted Signal Groups Used for Passage</h2>
-                    <div style={{ backgroundColor: '#fff7ed', border: '1px solid #ffedd5', borderRadius: '8px', padding: '16px' }}>
+                    <div style={{
+                        backgroundColor: possibleGPSMismatch ? '#fff7ed' : '#fff7ed',
+                        border: `1px solid ${possibleGPSMismatch ? '#ffedd5' : '#ffedd5'}`,
+                        borderRadius: '8px',
+                        padding: '16px'
+                    }}>
                         <p style={{ color: '#9a3412', fontWeight: '500' }}>
                             No signal groups were predicted to be used for passage.
                         </p>
                         <p style={{ color: '#9a3412', fontSize: '14px', marginTop: '8px' }}>
-                            Despite all signal groups having available movement events, none showed a current green phase (greenStartTime = 0) in the last message.
+                            {possibleGPSMismatch
+                                ? 'The last event showed no current green phases, but green phases were found in previous events, suggesting possible GPS positioning issues.'
+                                : 'Despite all signal groups having available movement events, none showed a current green phase (greenStartTime = 0) in the last 3 events.'}
                         </p>
                     </div>
                 </div>
