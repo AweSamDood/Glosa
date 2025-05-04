@@ -1,4 +1,16 @@
 // Signal Group GLOSA Analysis Component
+import {
+    CartesianGrid,
+    Legend,
+    Line,
+    LineChart,
+    ResponsiveContainer, Scatter,
+    ScatterChart,
+    Tooltip,
+    XAxis,
+    YAxis
+} from "recharts";
+
 const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
     const metrics = signalGroup.metrics;
 
