@@ -327,7 +327,13 @@ export const calculateIntersectionSummary = (intersection) => {
             distancePatterns: [],
             speedPatterns: [],
             stopLocations: [],
-            signalGroupAnalysis: {}
+            signalGroupAnalysis: {},
+            predictionStatistics: {
+                predictedSignalGroups: {},
+                passThroughsWithPredictions: 0,
+                passThroughsWithNoGreenWarning: 0,
+                passThroughsWithGPSMismatch: 0
+            }
         };
     }
 
@@ -342,7 +348,14 @@ export const calculateIntersectionSummary = (intersection) => {
         distancePatterns: [],
         speedPatterns: [],
         stopLocations: [],
-        greenIntervalChanges: 0
+        greenIntervalChanges: 0,
+        // Add prediction statistics
+        predictionStatistics: {
+            predictedSignalGroups: {},
+            passThroughsWithPredictions: 0,
+            passThroughsWithNoGreenWarning: 0,
+            passThroughsWithGPSMismatch: 0
+        }
     };
 
     // Analyze patterns across all pass-throughs
@@ -355,6 +368,33 @@ export const calculateIntersectionSummary = (intersection) => {
         // Count green interval changes
         if (passThrough.summary?.significantGreenIntervalChangeOccurred) {
             summary.greenIntervalChanges++;
+        }
+
+        // Analyze predicted signal groups
+        if (passThrough.summary?.predictedSignalGroupsUsed) {
+            const predictions = passThrough.summary.predictedSignalGroupsUsed;
+            if (predictions.length > 0) {
+                summary.predictionStatistics.passThroughsWithPredictions++;
+
+                predictions.forEach(prediction => {
+                    const sgName = prediction.signalGroup;
+                    if (!summary.predictionStatistics.predictedSignalGroups[sgName]) {
+                        summary.predictionStatistics.predictedSignalGroups[sgName] = {
+                            count: 0,
+                            percentage: 0
+                        };
+                    }
+                    summary.predictionStatistics.predictedSignalGroups[sgName].count++;
+                });
+            }
+        }
+
+        // Count warning types
+        if (passThrough.summary?.hasNoPredictedGreensWithAvailableEvents) {
+            summary.predictionStatistics.passThroughsWithNoGreenWarning++;
+        }
+        if (passThrough.summary?.possibleGPSMismatch) {
+            summary.predictionStatistics.passThroughsWithGPSMismatch++;
         }
 
         Object.entries(passThrough.signalGroups || {}).forEach(([sgName, sgData]) => {
@@ -447,6 +487,11 @@ export const calculateIntersectionSummary = (intersection) => {
         });
     });
 
+    // Calculate percentages for predicted signal groups
+    Object.values(summary.predictionStatistics.predictedSignalGroups).forEach(stat => {
+        stat.percentage = (stat.count / passThroughs.length * 100).toFixed(1);
+    });
+
     // Analyze stop locations for patterns - Count unique stops per distance bucket
     const stopsByDistance = new Map(); // Key: distanceBucket, Value: Set of passIndexes
     passThroughStops.forEach((stopInfo, key) => {
@@ -511,7 +556,6 @@ export const calculateIntersectionSummary = (intersection) => {
 
     return summary;
 };
-
 
 
 // Add this to processRawData function after creating intersectionMap

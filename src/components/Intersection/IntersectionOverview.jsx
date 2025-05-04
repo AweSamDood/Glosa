@@ -9,6 +9,12 @@ const IntersectionOverview = ({ intersection }) => {
 
     const summary = intersection.summary;
     const hasStopPatterns = summary.stopLocations && summary.stopLocations.length > 0;
+    const predictionStats = summary.predictionStatistics || {
+        predictedSignalGroups: {},
+        passThroughsWithPredictions: 0,
+        passThroughsWithNoGreenWarning: 0,
+        passThroughsWithGPSMismatch: 0
+    };
 
     // Prepare data for movement event availability pie chart
     const movementEventData = Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => ({
@@ -20,6 +26,41 @@ const IntersectionOverview = ({ intersection }) => {
             data.movementEventAvailability.unavailable +
             data.movementEventAvailability.none
     }));
+
+    // Prepare data for predicted signal groups chart
+    const predictedSignalGroupsData = Object.entries(predictionStats.predictedSignalGroups)
+        .map(([sgName, data]) => ({
+            signalGroup: sgName,
+            count: data.count,
+            percentage: parseFloat(data.percentage)
+        }))
+        .sort((a, b) => b.count - a.count);
+
+    // Prepare data for pass-through analysis pie chart
+    const passThroughAnalysisData = [
+        {
+            name: 'With Predictions',
+            value: predictionStats.passThroughsWithPredictions,
+            color: '#10b981' // green
+        },
+        {
+            name: 'No Green (GPS Issue)',
+            value: predictionStats.passThroughsWithGPSMismatch,
+            color: '#f59e0b' // yellow
+        },
+        {
+            name: 'No Green (Red Pass)',
+            value: predictionStats.passThroughsWithNoGreenWarning - predictionStats.passThroughsWithGPSMismatch,
+            color: '#dc2626' // red
+        },
+        {
+            name: 'Other',
+            value: summary.totalPassThroughs -
+                predictionStats.passThroughsWithPredictions -
+                predictionStats.passThroughsWithNoGreenWarning,
+            color: '#9ca3af' // gray
+        }
+    ].filter(item => item.value > 0);
 
     // Colors for pie chart
     const COLORS = ['#10b981', '#9ca3af', '#ef4444']; // green, gray, red
@@ -63,6 +104,94 @@ const IntersectionOverview = ({ intersection }) => {
                     </p>
                 </div>
             </div>
+
+            {/* Pass-Through Prediction Analysis */}
+            <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Pass-Through Analysis</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+                    {/* Statistics */}
+                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+                        <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Pass-Through Statistics</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <p>
+                                <span style={{ fontWeight: '500' }}>With Predictions:</span>{' '}
+                                {predictionStats.passThroughsWithPredictions} ({(predictionStats.passThroughsWithPredictions / summary.totalPassThroughs * 100).toFixed(1)}%)
+                            </p>
+                            <p>
+                                <span style={{ fontWeight: '500' }}>GPS Issues:</span>{' '}
+                                {predictionStats.passThroughsWithGPSMismatch} ({(predictionStats.passThroughsWithGPSMismatch / summary.totalPassThroughs * 100).toFixed(1)}%)
+                            </p>
+                            <p>
+                                <span style={{ fontWeight: '500' }}>No Green Phase:</span>{' '}
+                                {predictionStats.passThroughsWithNoGreenWarning} ({(predictionStats.passThroughsWithNoGreenWarning / summary.totalPassThroughs * 100).toFixed(1)}%)
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Pie Chart */}
+                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+                        <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Pass-Through Categories</h4>
+                        <div style={{ height: '250px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={passThroughAnalysisData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={40}
+                                        outerRadius={80}
+                                        paddingAngle={2}
+                                        dataKey="value"
+                                    >
+                                        {passThroughAnalysisData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Predicted Signal Groups Usage */}
+            {predictedSignalGroupsData.length > 0 && (
+                <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Predicted Signal Groups Usage</h3>
+                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+                        <p style={{ marginBottom: '16px', color: '#374151' }}>
+                            Signal groups predicted to be used for passage across all pass-throughs:
+                        </p>
+                        <div style={{ height: '300px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={predictedSignalGroupsData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis
+                                        dataKey="signalGroup"
+                                        angle={-45}
+                                        textAnchor="end"
+                                        height={70}
+                                    />
+                                    <YAxis
+                                        label={{ value: 'Number of Passes', angle: -90, position: 'insideLeft' }}
+                                    />
+                                    <Tooltip
+                                        formatter={(value, name, props) => {
+                                            if (name === 'count') {
+                                                return [`${value} (${props.payload.percentage}%)`, 'Passes'];
+                                            }
+                                            return [value, name];
+                                        }}
+                                    />
+                                    <Bar dataKey="count" fill="#3b82f6" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Stop Location Patterns */}
             {hasStopPatterns && (
@@ -197,29 +326,36 @@ const IntersectionOverview = ({ intersection }) => {
                         <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
                             <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Signal Group</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Occurrences</th>
+                            <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Predicted Uses</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Distance Range (m)</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Speed Range (km/h)</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Green Interval Changes</th>
                         </tr>
                         </thead>
                         <tbody>
-                        {Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => (
-                            <tr key={sgName} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                <td style={{ padding: '12px' }}>{sgName}</td>
-                                <td style={{ padding: '12px', textAlign: 'center' }}>{data.totalOccurrences}</td>
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
-                                    {data.distanceRange.min.toFixed(1)} - {data.distanceRange.max.toFixed(1)}
-                                </td>
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
-                                    {data.speedRange.min.toFixed(1)} - {data.speedRange.max.toFixed(1)}
-                                </td>
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                        {Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => {
+                            const predictedData = predictionStats.predictedSignalGroups[sgName];
+                            return (
+                                <tr key={sgName} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                    <td style={{ padding: '12px' }}>{sgName}</td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>{data.totalOccurrences}</td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                                        {predictedData ? `${predictedData.count} (${predictedData.percentage}%)` : '0 (0.0%)'}
+                                    </td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                                        {data.distanceRange.min.toFixed(1)} - {data.distanceRange.max.toFixed(1)}
+                                    </td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                                        {data.speedRange.min.toFixed(1)} - {data.speedRange.max.toFixed(1)}
+                                    </td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>
                                         <span style={{ color: data.greenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
                                             {data.greenIntervalChanges}
                                         </span>
-                                </td>
-                            </tr>
-                        ))}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                         </tbody>
                     </table>
                 </div>
