@@ -1,5 +1,5 @@
 // src/components/GLOSADashboard/GLOSADashboard.jsx
-// (No functional changes needed for layout based on review - providing full code for completeness)
+// (No changes from the previous version)
 
 import { useState, useEffect, useMemo } from 'react';
 import { useGlosaData } from '../../hooks/useGlosaData';
@@ -117,9 +117,9 @@ const GLOSADashboard = () => {
                             </div>
 
                             {/* Render active tab content directly within the scrollable area */}
+                            {/* The active tab component itself now controls its content layout */}
                             {activeTab === 'overview' && <OverviewTab passThrough={selectedPass} />}
                             {activeTab === 'glosa' && <GLOSAAnalysisTab passThrough={selectedPass} />}
-                            {/* DataTableTab needs to manage its own internal scrolling if necessary */}
                             {activeTab === 'data' && <DataTableTab passThrough={selectedPass} />}
                         </>
                     ) : (

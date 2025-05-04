@@ -17,19 +17,14 @@ const DataTableTab = ({ passThrough }) => {
 
     // Effect to manage selected signal group
     useEffect(() => {
-        // If a group is selected but not available in the current passThrough, reset
         if (selectedSignalGroup && !signalGroupNames.includes(selectedSignalGroup)) {
             setSelectedSignalGroup(hasSignalGroups ? signalGroupNames[0] : null);
-        }
-        // If no group is selected but groups are available, select the first one
-        else if (!selectedSignalGroup && hasSignalGroups) {
+        } else if (!selectedSignalGroup && hasSignalGroups) {
             setSelectedSignalGroup(signalGroupNames[0]);
-        }
-        // If no groups available, ensure selection is null
-        else if (!hasSignalGroups) {
+        } else if (!hasSignalGroups) {
             setSelectedSignalGroup(null);
         }
-    }, [passThrough, signalGroupNames, selectedSignalGroup, hasSignalGroups]); // Add hasSignalGroups dependency
+    }, [passThrough, signalGroupNames, selectedSignalGroup, hasSignalGroups]);
 
     // Get metrics for selected signal group safely
     const metrics = (selectedSignalGroup &&
@@ -40,7 +35,8 @@ const DataTableTab = ({ passThrough }) => {
     // Render placeholder if no signal groups
     if (!hasSignalGroups) {
         return (
-            <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginTop: '24px' /* Add margin if tabs aren't shown */ }}>
+            // Ensure this placeholder takes width too if needed, although likely not the issue
+            <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>Data Table</h3>
                 <p>No signal groups available for this pass-through.</p>
             </div>
@@ -48,10 +44,11 @@ const DataTableTab = ({ passThrough }) => {
     }
 
     return (
-        // Container for the entire tab content
+        // Main container for the tab's content. Should behave as a block element by default.
+        // No explicit width needed here; it should inherit from the parent in GLOSADashboard.
         <div>
-            {/* Signal Group Selection */}
-            <div style={{ marginBottom: '24px' }}>
+            {/* Signal Group Selection  */ }
+            <div style={{ marginBottom: '24px' ,}}>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>Select Signal Group</h3>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {signalGroupNames.map(name => (
@@ -76,22 +73,21 @@ const DataTableTab = ({ passThrough }) => {
                 </div>
             </div>
 
-            {/* Data Table Card */}
+            {/* Data Table Card - REMOVED overflow: hidden */}
             {selectedSignalGroup && (
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', overflow: 'hidden' /* Clip corners */ }}>
+                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
                     <h3 style={{ fontSize: '18px', fontWeight: '600', padding: '16px', borderBottom: '1px solid #e5e7eb', margin: 0 }}>
                         Data for Signal Group: {selectedSignalGroup}
                     </h3>
                     {/* This div handles horizontal scrolling *only* for the table */}
-                    <div style={{ overflowX: 'auto', paddingBottom: '1px' /* Prevents scrollbar cutting border */ }}>
+                    <div style={{ overflowX: 'auto', paddingBottom: '1px' /* Consistent padding/border look */ }}>
                         {metrics.length > 0 ? (
                             <table style={{
-                                // REMOVED width: '100%', let table size naturally
-                                minWidth: '100%', // Ensure table fills container at minimum
+                                minWidth: '100%', // Ensures it stretches to container width minimum
                                 borderCollapse: 'collapse',
-                                tableLayout: 'auto', // Let browser determine column widths
+                                tableLayout: 'auto', // Allows table to expand based on content
                             }}>
-                                <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 1 /* Keep header visible on scroll */ }}>
+                                <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 1 }}>
                                 <tr>
                                     {/* Status column */}
                                     <th style={{ width: '40px', padding: '12px 8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', color: '#6b7280', letterSpacing: '0.05em' }}></th>
@@ -112,13 +108,9 @@ const DataTableTab = ({ passThrough }) => {
                                     const rowStyle = {
                                         backgroundColor: intervalChanged ? '#fffbeb' : (i % 2 === 0 ? 'white' : '#f9fafb'),
                                         borderBottom: '1px solid #e5e7eb',
-                                        transition: 'background-color 0.3s ease',
+                                        // Removing transition for performance testing if needed
+                                        // transition: 'background-color 0.3s ease',
                                     };
-                                    // Alternate row styling without transition for performance if needed
-                                    // const rowStyle = {
-                                    //     backgroundColor: intervalChanged ? '#fffbeb' : (i % 2 === 0 ? 'white' : '#f9fafb'),
-                                    //     borderBottom: '1px solid #e5e7eb',
-                                    // };
 
                                     return (
                                         <tr key={i} style={rowStyle} >
@@ -131,7 +123,8 @@ const DataTableTab = ({ passThrough }) => {
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>{metric.distance.toFixed(1)}</td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>{metric.speed.toFixed(1)}</td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151' }}>
-                                                <div style={{ minWidth:'120px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={metric.glosaAdvice || 'N/A'}>
+                                                {/* Min width helps prevent this column collapsing too much */}
+                                                <div style={{ minWidth:'120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={metric.glosaAdvice || 'N/A'}>
                                                     {metric.glosaAdvice || 'N/A'}
                                                 </div>
                                             </td>
@@ -148,7 +141,7 @@ const DataTableTab = ({ passThrough }) => {
                                                     ? `[${metric.greenStartTime ?? '-'}, ${metric.greenEndTime ?? '-'}]`
                                                     : 'N/A'}
                                             </td>
-                                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#374151', minWidth: '300px' /* Give movement events more space */ }}>
+                                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#374151', minWidth: '300px' }}>
                                                 {metric.movementEvents && metric.movementEvents.length > 0 ? (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                         {metric.movementEvents.map((me, idx) => (
@@ -156,7 +149,7 @@ const DataTableTab = ({ passThrough }) => {
                                                                 <div style={{ fontWeight: '600', color: me.state === 'protectedMovementAllowed' || me.state === 'permissiveMovementAllowed' ? '#059669' : me.state === 'stopAndRemain' ? '#dc2626' : '#374151', marginBottom: '2px', whiteSpace: 'normal' }}>
                                                                     {me.state}
                                                                 </div>
-                                                                <div style={{ fontSize: '12px', color: '#4b5563', display: 'flex', flexWrap: 'wrap', gap: '4px 10px' /* Increased gap */ }}>
+                                                                <div style={{ fontSize: '12px', color: '#4b5563', display: 'flex', flexWrap: 'wrap', gap: '4px 10px' }}>
                                                                     {me.minEndTime && <span>MinEnd: {me.minEndTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
                                                                     {me.maxEndTime && <span>MaxEnd: {me.maxEndTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
                                                                     {me.likelyTime && <span>Likely: {me.likelyTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
