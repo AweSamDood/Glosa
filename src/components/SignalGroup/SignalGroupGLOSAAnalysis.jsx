@@ -1,10 +1,11 @@
-// Signal Group GLOSA Analysis Component
+// src/components/SignalGroup/SignalGroupGLOSAAnalysis.jsx
 import {
     CartesianGrid,
     Legend,
     Line,
     LineChart,
-    ResponsiveContainer, Scatter,
+    ResponsiveContainer,
+    Scatter,
     ScatterChart,
     Tooltip,
     XAxis,
@@ -74,6 +75,16 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
         return '#6b7280'; // default gray
     };
 
+    // Custom tick formatter for distance
+    const formatDistance = (value) => value.toFixed(1);
+
+    // Custom tooltip formatter
+    const tooltipFormatter = (value, name) => {
+        if (name === 'Distance') return `${value.toFixed(1)}m`;
+        if (name === 'Speed') return `${value.toFixed(1)} km/h`;
+        return value;
+    };
+
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -94,12 +105,12 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                             : '#ef4444'
                     }}></div>
                     <span style={{ fontSize: '14px', color: '#6b7280' }}>
-            {signalGroup.hasMovementEvents
-                ? (signalGroup.allMovementEventsUnavailable
-                    ? 'Movement events (all unavailable)'
-                    : 'Available movement events')
-                : 'No movement events'}
-          </span>
+                        {signalGroup.hasMovementEvents
+                            ? (signalGroup.allMovementEventsUnavailable
+                                ? 'Movement events (all unavailable)'
+                                : 'Available movement events')
+                            : 'No movement events'}
+                    </span>
                 </div>
             </div>
 
@@ -146,28 +157,30 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                         {/* Chart 1: GLOSA Advice vs Distance */}
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                             <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>GLOSA Advice vs Distance to Intersection</h5>
-                            <div style={{ height: '300px' }}>
+                            <div style={{ height: '350px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
+                                    <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 50 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             type="number"
                                             dataKey="distance"
                                             name="Distance"
-                                            label={{ value: 'Distance to Intersection (m)', position: 'insideBottom', offset: -15 }}
+                                            label={{ value: 'Distance to Intersection (m)', position: 'insideBottom', offset: -10 }}
                                             domain={['dataMax', 'dataMin']} // Reverse axis (decreasing from left to right)
+                                            tickFormatter={formatDistance}
                                         />
                                         <YAxis
                                             type="number"
                                             dataKey="speed"
                                             name="Speed"
                                             label={{ value: 'Speed (km/h)', angle: -90, position: 'insideLeft' }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
                                         <Tooltip
-                                            formatter={(value, name) => [value, name]}
-                                            labelFormatter={(value) => `Distance: ${value}m`}
+                                            formatter={tooltipFormatter}
+                                            labelFormatter={(value) => `Distance: ${value.toFixed(1)}m`}
                                         />
-                                        <Legend />
+                                        <Legend verticalAlign="top" height={36} />
                                         {/* Group data by glosaAdvice */}
                                         {Array.from(new Set(chartData.map(d => d.glosaAdvice))).map(advice => (
                                             <Scatter
@@ -177,15 +190,6 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                                                 fill={getAdviceColor(advice)}
                                             />
                                         ))}
-                                        {/* Add a line connecting all points in time order */}
-                                        <Line
-                                            type="monotone"
-                                            dataKey="speed"
-                                            data={chartData}
-                                            stroke="#000"
-                                            strokeWidth={1}
-                                            dot={false}
-                                        />
                                     </ScatterChart>
                                 </ResponsiveContainer>
                             </div>
@@ -193,25 +197,27 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
 
                         {/* Chart 2: Time-Distance with Green Window */}
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                            <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>Time-Distance Trajectory with Green Window</h5>
-                            <div style={{ height: '300px' }}>
+                            <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>Time-Distance Trajectory</h5>
+                            <div style={{ height: '350px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
+                                    <LineChart margin={{ top: 20, right: 30, bottom: 40, left: 50 }} data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             type="number"
                                             dataKey="time"
                                             name="Time"
-                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -15 }}
+                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -10 }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
                                         <YAxis
                                             type="number"
                                             dataKey="distance"
                                             name="Distance"
                                             label={{ value: 'Distance to Intersection (m)', angle: -90, position: 'insideLeft' }}
+                                            tickFormatter={formatDistance}
                                         />
-                                        <Tooltip />
-                                        <Legend />
+                                        <Tooltip formatter={tooltipFormatter} />
+                                        <Legend verticalAlign="top" height={36} />
 
                                         {/* Main trajectory line */}
                                         <Line
@@ -221,6 +227,7 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                                             stroke="#000"
                                             strokeWidth={2}
                                             dot={false}
+                                            name="Vehicle Trajectory"
                                         />
 
                                         {/* Color-coded segments based on advice */}
@@ -246,24 +253,26 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                         {/* Chart 3: Speed vs Time with Advice */}
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                             <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>Speed vs Time with GLOSA Advice</h5>
-                            <div style={{ height: '300px' }}>
+                            <div style={{ height: '350px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
+                                    <LineChart margin={{ top: 20, right: 30, bottom: 40, left: 50 }} data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             type="number"
                                             dataKey="time"
                                             name="Time"
-                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -15 }}
+                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -10 }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
                                         <YAxis
                                             type="number"
                                             dataKey="speed"
                                             name="Speed"
                                             label={{ value: 'Speed (km/h)', angle: -90, position: 'insideLeft' }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
-                                        <Tooltip />
-                                        <Legend />
+                                        <Tooltip formatter={tooltipFormatter} />
+                                        <Legend verticalAlign="top" height={36} />
 
                                         {/* GLOSA advised speed line */}
                                         {chartData.some(d => d.glosaSpeedKph) && (
@@ -313,29 +322,32 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                         {/* Chart 4: GLOSA Parameters Timeline */}
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                             <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>GLOSA Parameters Timeline</h5>
-                            <div style={{ height: '300px' }}>
+                            <div style={{ height: '350px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
+                                    <LineChart margin={{ top: 20, right: 60, bottom: 40, left: 50 }} data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             type="number"
                                             dataKey="time"
                                             name="Time"
-                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -15 }}
+                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -10 }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
                                         <YAxis
                                             type="number"
                                             yAxisId="left"
                                             label={{ value: 'Time (seconds)', angle: -90, position: 'insideLeft' }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
                                         <YAxis
                                             type="number"
                                             yAxisId="right"
                                             orientation="right"
-                                            label={{ value: 'Speed (km/h)', angle: 90, position: 'insideRight' }}
+                                            label={{ value: 'Distance (m) / Speed (km/h)', angle: 90, position: 'insideRight' }}
+                                            tickFormatter={(value) => value.toFixed(0)}
                                         />
-                                        <Tooltip />
-                                        <Legend />
+                                        <Tooltip formatter={tooltipFormatter} />
+                                        <Legend verticalAlign="top" height={36} />
 
                                         {chartData.some(d => d.minTravelTime !== null) && (
                                             <Line
