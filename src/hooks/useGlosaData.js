@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { processRawData } from '../utils/dataProcessing';
 // Assuming your data files are in public/data
-const DATA_URL = './data/TrafficLightStatus-VIENNATEST-1.json';
+// const DATA_URL = './data/TrafficLightStatus-VIENNATEST-1.json';
+const DATA_URL = './data/output800-time-limit.json'; // Adjust the path as necessary
 
 export const useGlosaData = () => {
     const [intersections, setIntersections] = useState({});
