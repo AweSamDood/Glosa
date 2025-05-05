@@ -1,156 +1,21 @@
 // src/components/Tabs/OverviewTab.jsx
 import React from 'react';
 import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx";
+import VehiclePathMap from "../Map/VehiclePathMap.jsx";
 
-// Icon for stability status - updated to handle specific change types
-const StabilityIcon = ({ status, size = 16 }) => {
-    let color, title, path;
-
-    switch(status) {
-        case 'stable':
-            color = '#10b981'; // Green for stable
-            title = 'Green intervals remained stable';
-            path = <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />;
-            break;
-        case 'lostGreen':
-            color = '#ef4444'; // Red for lost green
-            title = 'Green intervals were reduced or disappeared';
-            path = <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clipRule="evenodd" />;
-            break;
-        case 'gotGreen':
-            color = '#22c55e'; // Brighter green for got green
-            title = 'Green intervals were extended or appeared';
-            path = <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clipRule="evenodd" />;
-            break;
-        case 'changed':
-        default:
-            color = '#f97316'; // Orange for mixed or unspecified changes
-            title = 'Significant green interval changes detected';
-            path = <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />;
-    }
+// Icon for stability status
+const StabilityIcon = ({ stable, size = 16 }) => {
+    const color = stable ? '#10b981' : '#f97316'; // Green for stable, Orange for changed
+    const title = stable ? 'Green intervals remained stable' : 'Significant green interval change detected';
 
     return (
         <svg title={title} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: `${size}px`, height: `${size}px`, color: color, verticalAlign: 'middle', marginLeft: '8px' }}>
-            {path}
+            {stable ? (
+                <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
+            ) : (
+                <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />
+            )}
         </svg>
-    );
-};
-
-// New component to display signal group change details
-const SignalGroupChangeDetails = ({ signalGroups }) => {
-    // Group signal groups by change type
-    const changes = {
-        lostGreen: [],
-        gotGreen: [],
-        mixed: [],
-        stable: []
-    };
-
-    Object.entries(signalGroups).forEach(([name, sg]) => {
-        const gotCount = sg.greenChangeTypes?.gotGreen || 0;
-        const lostCount = sg.greenChangeTypes?.lostGreen || 0;
-
-        if (gotCount > 0 && lostCount === 0) {
-            changes.gotGreen.push({ name, count: gotCount });
-        } else if (lostCount > 0 && gotCount === 0) {
-            changes.lostGreen.push({ name, count: lostCount });
-        } else if (gotCount > 0 && lostCount > 0) {
-            changes.mixed.push({ name, gotCount, lostCount });
-        } else if (sg.metrics?.some(m => m.greenIntervalChanged)) {
-            // If there are changes but not categorized
-            changes.mixed.push({ name, gotCount: 0, lostCount: 0 });
-        } else {
-            changes.stable.push({ name });
-        }
-    });
-
-    // Return if no changes detected
-    const hasNoChanges =
-        changes.lostGreen.length === 0 &&
-        changes.gotGreen.length === 0 &&
-        changes.mixed.length === 0;
-
-    if (hasNoChanges) {
-        return (
-            <div style={{ fontSize: '14px', color: '#10b981', display: 'flex', alignItems: 'center', marginTop: '12px' }}>
-                <StabilityIcon status="stable" />
-                <span style={{ marginLeft: '8px' }}>All signal groups remained stable with no green interval changes.</span>
-            </div>
-        );
-    }
-
-    return (
-        <div style={{ marginTop: '16px' }}>
-            <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Signal Group Change Details</h4>
-
-            {changes.lostGreen.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#ef4444', display: 'flex', alignItems: 'center' }}>
-                        <StabilityIcon status="lostGreen" size={14} />
-                        <span style={{ marginLeft: '8px' }}>Lost Green Time:</span>
-                    </div>
-                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
-                        {changes.lostGreen.map(sg => (
-                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                                <strong>{sg.name}</strong>: Lost green {sg.count} {sg.count === 1 ? 'time' : 'times'}
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-
-            {changes.gotGreen.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#22c55e', display: 'flex', alignItems: 'center' }}>
-                        <StabilityIcon status="gotGreen" size={14} />
-                        <span style={{ marginLeft: '8px' }}>Got Green Time:</span>
-                    </div>
-                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
-                        {changes.gotGreen.map(sg => (
-                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                                <strong>{sg.name}</strong>: Got green {sg.count} {sg.count === 1 ? 'time' : 'times'}
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-
-            {changes.mixed.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#f97316', display: 'flex', alignItems: 'center' }}>
-                        <StabilityIcon status="changed" size={14} />
-                        <span style={{ marginLeft: '8px' }}>Mixed Changes:</span>
-                    </div>
-                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
-                        {changes.mixed.map(sg => (
-                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                                <strong>{sg.name}</strong>:
-                                {sg.gotCount > 0 && sg.lostCount > 0 ?
-                                    ` Got green ${sg.gotCount} ${sg.gotCount === 1 ? 'time' : 'times'}, lost green ${sg.lostCount} ${sg.lostCount === 1 ? 'time' : 'times'}` :
-                                    ' Had mixed or unspecified changes'
-                                }
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-
-            {changes.stable.length > 0 && (
-                <div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#10b981', display: 'flex', alignItems: 'center' }}>
-                        <StabilityIcon status="stable" size={14} />
-                        <span style={{ marginLeft: '8px' }}>Stable:</span>
-                    </div>
-                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
-                        {changes.stable.map(sg => (
-                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                                <strong>{sg.name}</strong>: No green interval changes
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
     );
 };
 
@@ -167,34 +32,7 @@ const OverviewTab = ({ passThrough }) => {
     const movementEventsStatus = hasMovementEvents
         ? (summary.allMovementEventsUnavailable ? 'Present (Unavailable)' : 'Available')
         : 'None Found';
-
-    // Update green interval stability logic to use change types
-    const greenIntervalChanged = summary.significantGreenIntervalChangeOccurred ?? false;
-    const greenChangeTypes = summary.greenChangeTypes || { lostGreen: 0, gotGreen: 0 };
-
-    // Determine stability status based on change types
-    let stabilityStatus = 'stable';
-    let stabilityText = 'Stable';
-
-    if (greenIntervalChanged) {
-        const lostCount = greenChangeTypes.lostGreen || 0;
-        const gotCount = greenChangeTypes.gotGreen || 0;
-
-        if (lostCount > 0 && gotCount === 0) {
-            stabilityStatus = 'lostGreen';
-            stabilityText = `Lost Green (${lostCount} times)`;
-        } else if (gotCount > 0 && lostCount === 0) {
-            stabilityStatus = 'gotGreen';
-            stabilityText = `Got Green (${gotCount} times)`;
-        } else if (lostCount > 0 && gotCount > 0) {
-            stabilityStatus = 'changed';
-            stabilityText = `Mixed Changes (${lostCount} lost, ${gotCount} got)`;
-        } else {
-            stabilityStatus = 'changed';
-            stabilityText = 'Changed';
-        }
-    }
-
+    const greenIntervalStable = !(summary.significantGreenIntervalChangeOccurred ?? false);
     const predictedSignalGroups = summary.predictedSignalGroupsUsed || [];
     const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents || false;
     const possibleGPSMismatch = summary.possibleGPSMismatch || false;
@@ -213,15 +51,19 @@ const OverviewTab = ({ passThrough }) => {
                     <span style={{ fontWeight: '500' }}>Movement events:</span> <span>{movementEventsStatus}</span>
                     <span style={{ fontWeight: '500' }}>Green Interval Stability:</span>
                     <span>
-                        {stabilityText}
-                        <StabilityIcon status={stabilityStatus} />
+                        {greenIntervalStable ? 'Stable' : 'Changed'}
+                        <StabilityIcon stable={greenIntervalStable} />
                     </span>
                 </div>
+            </div>
 
-                {/* New section: Signal Group Change Details */}
-                {greenIntervalChanged && passThrough.signalGroups && (
-                    <SignalGroupChangeDetails signalGroups={passThrough.signalGroups} />
-                )}
+            {/* Vehicle Path Map Section */}
+            <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Vehicle Path</h2>
+                <VehiclePathMap passThrough={passThrough} />
+                <div style={{ marginTop: '12px', fontSize: '14px', color: '#6b7280' }}>
+                    <p>Map shows the vehicle's path toward the intersection. Green marker indicates the start point, red marker indicates the intersection.</p>
+                </div>
             </div>
 
             {/* GPS Mismatch Warning */}
