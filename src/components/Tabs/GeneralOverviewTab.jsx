@@ -19,10 +19,9 @@ const GeneralOverviewTab = ({ intersections }) => {
                 greenChangeTypes: { lostGreen: 0, gotGreen: 0 },
                 signalGroupStats: {
                     totalSignalGroups: 0,
-                    signalGroupNames: new Set(),
-                    predictedUsage: {},
                     glosaAdviceDistribution: {}
-                }
+                },
+                intersectionStability: []
             };
         }
 
@@ -42,10 +41,10 @@ const GeneralOverviewTab = ({ intersections }) => {
             signalGroupStats: {
                 totalSignalGroups: 0,
                 signalGroupNames: new Set(),
-                predictedUsage: {},
                 movementEventAvailability: { available: 0, unavailable: 0, none: 0 },
                 glosaAdviceDistribution: {}
-            }
+            },
+            intersectionStability: []
         };
 
         // Process each intersection
@@ -59,7 +58,8 @@ const GeneralOverviewTab = ({ intersections }) => {
             // Add to passes by intersection chart data
             aggregatedStats.passesByIntersection.push({
                 name: intersection.name,
-                passes: passCount
+                passes: passCount,
+                id: intersection.id
             });
 
             // Update time range
@@ -93,17 +93,13 @@ const GeneralOverviewTab = ({ intersections }) => {
                 aggregatedStats.gpsIssueCount += predStats.passThroughsWithGPSMismatch || 0;
                 aggregatedStats.noGreenWarningCount += predStats.passThroughsWithNoGreenWarning || 0;
                 aggregatedStats.withPredictionsCount += predStats.passThroughsWithPredictions || 0;
-
-                // Process predicted signal groups
-                Object.entries(predStats.predictedSignalGroups || {}).forEach(([sgName, data]) => {
-                    if (!aggregatedStats.signalGroupStats.predictedUsage[sgName]) {
-                        aggregatedStats.signalGroupStats.predictedUsage[sgName] = 0;
-                    }
-                    aggregatedStats.signalGroupStats.predictedUsage[sgName] += data.count || 0;
-                });
             }
 
-            // Process signal group stats
+            // Check for movement event availability
+            let hasMovementEvents = false;
+            let hasAvailableMovementEvents = false;
+
+            // Process signal group stats for movement events
             Object.entries(intersection.summary?.signalGroupAnalysis || {}).forEach(([sgName, data]) => {
                 // Count unique signal groups
                 aggregatedStats.signalGroupStats.signalGroupNames.add(sgName);
@@ -116,6 +112,17 @@ const GeneralOverviewTab = ({ intersections }) => {
                         data.movementEventAvailability.unavailable || 0;
                     aggregatedStats.signalGroupStats.movementEventAvailability.none +=
                         data.movementEventAvailability.none || 0;
+
+                    // Check if this signal group has movement events
+                    if (data.movementEventAvailability.available > 0 ||
+                        data.movementEventAvailability.unavailable > 0) {
+                        hasMovementEvents = true;
+
+                        // Check if it has available movement events
+                        if (data.movementEventAvailability.available > 0) {
+                            hasAvailableMovementEvents = true;
+                        }
+                    }
                 }
 
                 // Process GLOSA advice
@@ -126,6 +133,23 @@ const GeneralOverviewTab = ({ intersections }) => {
                     aggregatedStats.signalGroupStats.glosaAdviceDistribution[advice] += count;
                 });
             });
+
+            // Add to intersection stability data if it has available movement events
+            if (hasAvailableMovementEvents) {
+                // Calculate stability metrics
+                const greenChanges = intersection.summary?.greenIntervalChanges || 0;
+                const passCount = intersection.passThroughs?.length || 0;
+                const changeRatio = passCount > 0 ? greenChanges / passCount : 0;
+
+                aggregatedStats.intersectionStability.push({
+                    name: intersection.name,
+                    id: intersection.id,
+                    greenChanges: greenChanges,
+                    passes: passCount,
+                    stabilityScore: 1 - (changeRatio > 1 ? 1 : changeRatio), // Normalize between 0-1
+                    changeRatio: changeRatio
+                });
+            }
         });
 
         // Calculate total signal groups
@@ -134,6 +158,16 @@ const GeneralOverviewTab = ({ intersections }) => {
 
         // Sort passes by intersection
         aggregatedStats.passesByIntersection.sort((a, b) => b.passes - a.passes);
+
+        // Sort intersection stability from most stable to least stable
+        aggregatedStats.intersectionStability.sort((a, b) => {
+            // First by stability score (higher is more stable)
+            if (b.stabilityScore !== a.stabilityScore) {
+                return b.stabilityScore - a.stabilityScore;
+            }
+            // Then by number of passes (more passes is more significant)
+            return b.passes - a.passes;
+        });
 
         return aggregatedStats;
     }, [intersections]);
@@ -154,17 +188,6 @@ const GeneralOverviewTab = ({ intersections }) => {
             { name: 'No Green', value: stats.noGreenWarningCount - stats.gpsIssueCount, color: '#dc2626' }, // red
             { name: 'Other', value: stats.totalPasses - stats.withPredictionsCount - stats.noGreenWarningCount, color: '#9ca3af' } // gray
         ].filter(item => item.value > 0);
-    }, [stats]);
-
-    const predictedSignalGroupsData = useMemo(() => {
-        return Object.entries(stats.signalGroupStats.predictedUsage)
-            .map(([sgName, count]) => ({
-                name: sgName,
-                value: count,
-                percentage: (count / stats.totalPasses * 100).toFixed(1)
-            }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 10); // Take top 10
     }, [stats]);
 
     const movementEventData = useMemo(() => {
@@ -194,6 +217,17 @@ const GeneralOverviewTab = ({ intersections }) => {
             .sort((a, b) => b.count - a.count)
             .slice(0, 10); // Take top 10
     }, [stats]);
+
+    // Prepare stability data for the chart
+    const stabilityChartData = useMemo(() => {
+        return stats.intersectionStability.map(int => ({
+            name: int.name,
+            stabilityScore: Math.round(int.stabilityScore * 100), // Convert to percentage
+            greenChanges: int.greenChanges,
+            passes: int.passes,
+            changeRatio: int.changeRatio.toFixed(2)
+        }));
+    }, [stats.intersectionStability]);
 
     // Colors for charts
     const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#9ca3af'];
@@ -226,6 +260,91 @@ const GeneralOverviewTab = ({ intersections }) => {
                     <p style={{ fontSize: '14px', color: '#111827' }}>{formattedTimeRange}</p>
                 </div>
             </div>
+
+            {/* Intersection Stability */}
+            {stabilityChartData.length > 0 && (
+                <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Intersection Stability (With Available Movement Events)</h3>
+                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+                        <p style={{ marginBottom: '16px', color: '#4b5563' }}>
+                            Stability is based on the frequency of green interval changes. Higher scores indicate more stable intersections.
+                            Only intersections with available movement events are shown.
+                        </p>
+                        <div style={{ height: '400px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={stabilityChartData}
+                                    margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                                    layout="vertical"
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                                    <XAxis
+                                        type="number"
+                                        domain={[0, 100]}
+                                        label={{ value: 'Stability Score (%)', position: 'insideBottom', offset: -5 }}
+                                    />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        width={150}
+                                        tick={{ fontSize: 12 }}
+                                    />
+                                    <Tooltip
+                                        formatter={(value, name, props) => {
+                                            if (name === 'stabilityScore') {
+                                                return [`${value}%`, 'Stability Score'];
+                                            }
+                                            return [value, name];
+                                        }}
+                                        labelFormatter={(label) => `Intersection: ${label}`}
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                const data = payload[0].payload;
+                                                return (
+                                                    <div style={{
+                                                        backgroundColor: 'white',
+                                                        padding: '10px',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px'
+                                                    }}>
+                                                        <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>
+                                                            {data.name}
+                                                        </p>
+                                                        <p style={{ margin: '0 0 3px 0', color: '#10b981' }}>
+                                                            Stability Score: {data.stabilityScore}%
+                                                        </p>
+                                                        <p style={{ margin: '0 0 3px 0' }}>
+                                                            Passes: {data.passes}
+                                                        </p>
+                                                        <p style={{ margin: '0 0 3px 0', color: '#ef4444' }}>
+                                                            Green Changes: {data.greenChanges}
+                                                        </p>
+                                                        <p style={{ margin: '0', color: '#4b5563', fontSize: '12px' }}>
+                                                            Changes per Pass: {data.changeRatio}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                    <Bar
+                                        dataKey="stabilityScore"
+                                        name="Stability Score"
+                                        fill="#10b981"
+                                        animationDuration={1500}
+                                        label={{
+                                            position: 'right',
+                                            formatter: (value) => `${value}%`,
+                                            fontSize: 12
+                                        }}
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Intersections List */}
             <div style={{ marginBottom: '32px' }}>
@@ -403,39 +522,6 @@ const GeneralOverviewTab = ({ intersections }) => {
                 </div>
             </div>
 
-            {/* Signal Group Usage */}
-            {predictedSignalGroupsData.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Most Used Signal Groups</h3>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <div style={{ height: '400px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={predictedSignalGroupsData}
-                                    margin={{ top: 20, right: 30, left: 20, bottom: 50 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis
-                                        dataKey="name"
-                                        angle={-45}
-                                        textAnchor="end"
-                                        interval={0}
-                                        height={50}
-                                    />
-                                    <YAxis label={{ value: 'Number of Passes', angle: -90, position: 'insideLeft' }} />
-                                    <Tooltip
-                                        formatter={(value, name, props) => {
-                                            return [`${value} (${props.payload.percentage}%)`, 'Used in Passes'];
-                                        }}
-                                    />
-                                    <Bar dataKey="value" name="Used in Passes" fill="#3b82f6" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Movement Event Availability */}
             {movementEventData.length > 0 && (
                 <div style={{ marginBottom: '32px' }}>
@@ -469,7 +555,7 @@ const GeneralOverviewTab = ({ intersections }) => {
 
             {/* GLOSA Advice Distribution */}
             {glosaAdviceData.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
+                <div>
                     <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Distribution</h3>
                     <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                         <div style={{ height: '400px' }}>
@@ -495,36 +581,6 @@ const GeneralOverviewTab = ({ intersections }) => {
                     </div>
                 </div>
             )}
-
-            {/* Signal Group List */}
-            <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>All Signal Groups</h3>
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                        gap: '8px',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        padding: '8px'
-                    }}>
-                        {Array.from(stats.signalGroupStats.signalGroupNames).map(sgName => (
-                            <div
-                                key={sgName}
-                                style={{
-                                    padding: '8px',
-                                    backgroundColor: 'white',
-                                    borderRadius: '4px',
-                                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                                    fontSize: '14px'
-                                }}
-                            >
-                                {sgName}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };
