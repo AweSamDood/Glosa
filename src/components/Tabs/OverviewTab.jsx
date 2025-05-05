@@ -36,6 +36,124 @@ const StabilityIcon = ({ status, size = 16 }) => {
     );
 };
 
+// New component to display signal group change details
+const SignalGroupChangeDetails = ({ signalGroups }) => {
+    // Group signal groups by change type
+    const changes = {
+        lostGreen: [],
+        gotGreen: [],
+        mixed: [],
+        stable: []
+    };
+
+    Object.entries(signalGroups).forEach(([name, sg]) => {
+        const gotCount = sg.greenChangeTypes?.gotGreen || 0;
+        const lostCount = sg.greenChangeTypes?.lostGreen || 0;
+
+        if (gotCount > 0 && lostCount === 0) {
+            changes.gotGreen.push({ name, count: gotCount });
+        } else if (lostCount > 0 && gotCount === 0) {
+            changes.lostGreen.push({ name, count: lostCount });
+        } else if (gotCount > 0 && lostCount > 0) {
+            changes.mixed.push({ name, gotCount, lostCount });
+        } else if (sg.metrics?.some(m => m.greenIntervalChanged)) {
+            // If there are changes but not categorized
+            changes.mixed.push({ name, gotCount: 0, lostCount: 0 });
+        } else {
+            changes.stable.push({ name });
+        }
+    });
+
+    // Return if no changes detected
+    const hasNoChanges =
+        changes.lostGreen.length === 0 &&
+        changes.gotGreen.length === 0 &&
+        changes.mixed.length === 0;
+
+    if (hasNoChanges) {
+        return (
+            <div style={{ fontSize: '14px', color: '#10b981', display: 'flex', alignItems: 'center', marginTop: '12px' }}>
+                <StabilityIcon status="stable" />
+                <span style={{ marginLeft: '8px' }}>All signal groups remained stable with no green interval changes.</span>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ marginTop: '16px' }}>
+            <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Signal Group Change Details</h4>
+
+            {changes.lostGreen.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#ef4444', display: 'flex', alignItems: 'center' }}>
+                        <StabilityIcon status="lostGreen" size={14} />
+                        <span style={{ marginLeft: '8px' }}>Lost Green Time:</span>
+                    </div>
+                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
+                        {changes.lostGreen.map(sg => (
+                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                                <strong>{sg.name}</strong>: Lost green {sg.count} {sg.count === 1 ? 'time' : 'times'}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {changes.gotGreen.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#22c55e', display: 'flex', alignItems: 'center' }}>
+                        <StabilityIcon status="gotGreen" size={14} />
+                        <span style={{ marginLeft: '8px' }}>Got Green Time:</span>
+                    </div>
+                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
+                        {changes.gotGreen.map(sg => (
+                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                                <strong>{sg.name}</strong>: Got green {sg.count} {sg.count === 1 ? 'time' : 'times'}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {changes.mixed.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#f97316', display: 'flex', alignItems: 'center' }}>
+                        <StabilityIcon status="changed" size={14} />
+                        <span style={{ marginLeft: '8px' }}>Mixed Changes:</span>
+                    </div>
+                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
+                        {changes.mixed.map(sg => (
+                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                                <strong>{sg.name}</strong>:
+                                {sg.gotCount > 0 && sg.lostCount > 0 ?
+                                    ` Got green ${sg.gotCount} ${sg.gotCount === 1 ? 'time' : 'times'}, lost green ${sg.lostCount} ${sg.lostCount === 1 ? 'time' : 'times'}` :
+                                    ' Had mixed or unspecified changes'
+                                }
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {changes.stable.length > 0 && (
+                <div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#10b981', display: 'flex', alignItems: 'center' }}>
+                        <StabilityIcon status="stable" size={14} />
+                        <span style={{ marginLeft: '8px' }}>Stable:</span>
+                    </div>
+                    <ul style={{ marginLeft: '28px', marginTop: '4px' }}>
+                        {changes.stable.map(sg => (
+                            <li key={sg.name} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                                <strong>{sg.name}</strong>: No green interval changes
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const OverviewTab = ({ passThrough }) => {
     const summary = passThrough.summary || {};
     const uuid = passThrough.uuid || 'N/A';
@@ -99,6 +217,11 @@ const OverviewTab = ({ passThrough }) => {
                         <StabilityIcon status={stabilityStatus} />
                     </span>
                 </div>
+
+                {/* New section: Signal Group Change Details */}
+                {greenIntervalChanged && passThrough.signalGroups && (
+                    <SignalGroupChangeDetails signalGroups={passThrough.signalGroups} />
+                )}
             </div>
 
             {/* GPS Mismatch Warning */}
