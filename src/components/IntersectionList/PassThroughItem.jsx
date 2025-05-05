@@ -24,6 +24,44 @@ const GPSWarningIcon = ({ title }) => (
     </svg>
 );
 
+// Helper function to extract ingress ID from passThrough data
+const getIngressID = (passThrough) => {
+    // Try to find ingress in the first event
+    if (passThrough?.signalGroups) {
+        for (const sgName in passThrough.signalGroups) {
+            const sg = passThrough.signalGroups[sgName];
+            if (sg.metrics && sg.metrics.length > 0) {
+                for (const metric of sg.metrics) {
+                    if (metric._rawEvent &&
+                        metric._rawEvent.intersectionPass?.intPassInfo?.ingress !== undefined) {
+                        return metric._rawEvent.intersectionPass.intPassInfo.ingress;
+                    }
+                }
+            }
+        }
+    }
+    return null;
+};
+
+// Function to get color based on ingress ID
+const getIngressColor = (ingress) => {
+    if (ingress === null || ingress === undefined) return '#9ca3af'; // gray
+
+    const colors = {
+        1: '#3b82f6', // blue
+        2: '#8b5cf6', // purple
+        3: '#ec4899', // pink
+        4: '#f97316', // orange
+        5: '#22c55e', // green
+        6: '#64748b', // slate
+        7: '#f59e0b', // amber
+        8: '#06b6d4', // cyan
+        9: '#14b8a6', // teal
+    };
+
+    return colors[ingress] || '#9ca3af'; // default gray
+};
+
 const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
     // Default values for safety
     const summary = passThrough.summary || {
@@ -43,6 +81,10 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
     const possibleGPSMismatch = summary.possibleGPSMismatch;
     const signalGroupCount = Object.keys(signalGroups).length;
     const time = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Get ingress ID for this pass-through
+    const ingressID = getIngressID(passThrough);
+    const ingressColor = getIngressColor(ingressID);
 
     // Determine status indicator properties
     const getStatusIndicatorProps = () => {
@@ -90,11 +132,26 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                 </div>
             </div>
 
-            {/* Right Part: SG Count and Indicators */}
+            {/* Right Part: SG Count, Ingress Badge and Indicators */}
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <div style={{ fontSize: '12px', color: '#4b5563', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
                     {signalGroupCount} SG{signalGroupCount !== 1 ? 's' : ''}
                 </div>
+
+                {/* Ingress Badge - show if available */}
+                {ingressID !== null && (
+                    <div style={{
+                        fontSize: '12px',
+                        color: 'white',
+                        backgroundColor: ingressColor,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontWeight: '500'
+                    }}>
+                        I:{ingressID}
+                    </div>
+                )}
+
                 {/* GPS Warning */}
                 {possibleGPSMismatch && (
                     <GPSWarningIcon title="Possible GPS mismatch - Green phase found in previous events but not in last event" />
