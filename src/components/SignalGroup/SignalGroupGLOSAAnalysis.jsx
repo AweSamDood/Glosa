@@ -170,8 +170,9 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                                             dataKey="distance"
                                             name="Distance"
                                             label={{ value: 'Distance to Intersection (m)', position: 'insideBottom', offset: -10 }}
-                                            domain={['dataMax', 'dataMin']} // Reverse axis (decreasing from left to right)
+                                            domain={['auto', 'auto']}
                                             tickFormatter={formatDistance}
+                                            reversed={true}
                                         />
                                         <YAxis
                                             type="number"
