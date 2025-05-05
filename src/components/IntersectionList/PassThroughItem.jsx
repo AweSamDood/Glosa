@@ -62,11 +62,15 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
         <div
             style={{
                 padding: '12px 16px 12px 32px',
-                borderBottom: '1px solid #f3f4f6',
+                borderBottomWidth: '1px',
+                borderBottomStyle: 'solid',
+                borderBottomColor: '#f3f4f6',
                 cursor: 'pointer',
                 backgroundColor: isSelected ? '#eff6ff' : 'white',
-                borderLeft: isSelected ? '4px solid #3b82f6' : '4px solid transparent',
-                transition: 'background-color 0.2s ease, border-left 0.2s ease',
+                borderLeftWidth: '4px',
+                borderLeftStyle: 'solid',
+                borderLeftColor: isSelected ? '#3b82f6' : 'transparent',
+                transition: 'background-color 0.2s ease, border-left-color 0.2s ease',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
@@ -88,7 +92,7 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
 
             {/* Right Part: SG Count and Indicators */}
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{ fontSize: '12px', color: '#4b5563', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#4b5563', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
                     {signalGroupCount} SG{signalGroupCount !== 1 ? 's' : ''}
                 </div>
                 {/* GPS Warning */}
@@ -109,7 +113,9 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                     height: '10px',
                     borderRadius: '50%',
                     backgroundColor: indicatorProps.color,
-                    border: '1px solid rgba(0,0,0,0.1)',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: 'rgba(0,0,0,0.1)',
                 }}></div>
             </div>
         </div>

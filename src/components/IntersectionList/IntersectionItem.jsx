@@ -22,7 +22,11 @@ const IntersectionItem = ({ intersection, selectedPassIndex, onSelectPassThrough
     const toggleExpanded = () => setExpanded(!expanded);
 
     return (
-        <div style={{ borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{
+            borderBottomWidth: '1px',
+            borderBottomStyle: 'solid',
+            borderBottomColor: '#e5e7eb'
+        }}>
             <div
                 style={{
                     padding: '12px 16px',
@@ -33,7 +37,9 @@ const IntersectionItem = ({ intersection, selectedPassIndex, onSelectPassThrough
                     alignItems: 'center',
                     backgroundColor: '#f9fafb',
                     color: '#374151',
-                    borderTop: '1px solid #e5e7eb', // Separator line
+                    borderTopWidth: '1px',
+                    borderTopStyle: 'solid',
+                    borderTopColor: '#e5e7eb', // Separator line
                 }}
                 onClick={toggleExpanded}
                 role="button"
@@ -47,7 +53,14 @@ const IntersectionItem = ({ intersection, selectedPassIndex, onSelectPassThrough
                     </span>
                     <span title={`${intersection.name} (ID: ${intersection.id})`}>{intersection.name}</span>
                 </div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500', background: '#e5e7eb', padding: '2px 8px', borderRadius: '10px' }}>
+                <div style={{
+                    fontSize: '12px',
+                    color: '#6b7280',
+                    fontWeight: '500',
+                    backgroundColor: '#e5e7eb',
+                    padding: '2px 8px',
+                    borderRadius: '10px'
+                }}>
                     {intersection.passThroughs.length} {intersection.passThroughs.length === 1 ? 'pass' : 'passes'}
                 </div>
             </div>

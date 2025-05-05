@@ -1,11 +1,10 @@
 // src/components/Map/VehiclePathMap.jsx
-// To install Leaflet, run: npm install leaflet
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const VehiclePathMap = ({ passThrough }) => {
     const mapRef = useRef(null);
     const mapInstanceRef = useRef(null); // To keep track of the map instance
-    const errorRef = useRef(null);
+    const [errorMessage, setErrorMessage] = useState(null);
 
     // Extract all position data from the metrics of all signal groups
     const extractPathCoordinates = () => {
@@ -28,7 +27,7 @@ const VehiclePathMap = ({ passThrough }) => {
         }));
     };
 
-    // Effect to clean up map when component unmounts
+    // Effect to clean up map when component unmounts or before re-initializing
     useEffect(() => {
         return () => {
             if (mapInstanceRef.current) {
@@ -40,11 +39,8 @@ const VehiclePathMap = ({ passThrough }) => {
 
     // Effect to initialize/update map whenever passThrough changes
     useEffect(() => {
-        // Clear any previous error
-        if (errorRef.current) {
-            errorRef.current.style.display = 'none';
-            errorRef.current = null;
-        }
+        // Reset error message
+        setErrorMessage(null);
 
         // Always clean up previous map instance if it exists
         if (mapInstanceRef.current) {
@@ -59,32 +55,14 @@ const VehiclePathMap = ({ passThrough }) => {
         const pathCoordinates = extractPathCoordinates();
 
         if (pathCoordinates.length === 0) {
-            // Show error message
-            const errorDiv = document.createElement('div');
-            errorDiv.innerHTML = `
-                <div style="text-align: center; padding: 20px; color: #6b7280;">
-                    <p>No valid GPS coordinates found in the pass-through data.</p>
-                    <p style="font-size: 14px; margin-top: 8px;">
-                        Make sure the pass-through contains valid GPS coordinates.
-                    </p>
-                </div>
-            `;
-            errorDiv.style.display = 'flex';
-            errorDiv.style.justifyContent = 'center';
-            errorDiv.style.alignItems = 'center';
-            errorDiv.style.backgroundColor = '#f9fafb';
-            errorDiv.style.height = '100%';
-            errorDiv.style.width = '100%';
-            errorRef.current = errorDiv;
-
-            // Clear map container first
-            mapRef.current.innerHTML = '';
-            mapRef.current.appendChild(errorDiv);
+            setErrorMessage("No valid GPS coordinates found in the pass-through data.");
             return;
         }
 
-        // Now we're sure we have coordinates, clear the container
-        mapRef.current.innerHTML = '';
+        // Now we're sure we have coordinates, clear the container for safety
+        if (mapRef.current) {
+            mapRef.current.innerHTML = '';
+        }
 
         // Load and initialize the map
         const loadLeaflet = async () => {
@@ -94,6 +72,11 @@ const VehiclePathMap = ({ passThrough }) => {
 
                 // Import CSS for Leaflet
                 await import('leaflet/dist/leaflet.css');
+
+                // Make sure map is not already initialized and container exists
+                if (mapInstanceRef.current || !mapRef.current) {
+                    return;
+                }
 
                 // Initialize the map
                 const map = L.map(mapRef.current);
@@ -155,33 +138,25 @@ const VehiclePathMap = ({ passThrough }) => {
 
                 // Force map to check its size and redraw
                 setTimeout(() => {
-                    map.invalidateSize();
+                    if (map && !map._isDestroyed) {
+                        map.invalidateSize();
+                    }
                 }, 100);
 
             } catch (err) {
                 console.error("Error loading map:", err);
-
-                // Show error in the map container
-                const errorDiv = document.createElement('div');
-                errorDiv.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #6b7280;">
-                        <p>Failed to load map: ${err.message}</p>
-                    </div>
-                `;
-                errorDiv.style.display = 'flex';
-                errorDiv.style.justifyContent = 'center';
-                errorDiv.style.alignItems = 'center';
-                errorDiv.style.backgroundColor = '#f9fafb';
-                errorDiv.style.height = '100%';
-                errorDiv.style.width = '100%';
-                errorRef.current = errorDiv;
-                // Clear map container first
-                mapRef.current.innerHTML = '';
-                mapRef.current.appendChild(errorDiv);
+                setErrorMessage(`Failed to load map: ${err.message}`);
             }
         };
 
-        loadLeaflet();
+        // Small timeout to ensure clean initialization
+        const timer = setTimeout(() => {
+            loadLeaflet();
+        }, 50);
+
+        return () => {
+            clearTimeout(timer);
+        };
     }, [passThrough]); // Re-run when passThrough changes
 
     // Map container styles
@@ -189,9 +164,31 @@ const VehiclePathMap = ({ passThrough }) => {
         height: '400px',
         width: '100%',
         borderRadius: '8px',
-        border: '1px solid #e5e7eb',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: '#e5e7eb',
         position: 'relative'
     };
+
+    // Error message display
+    if (errorMessage) {
+        return (
+            <div style={mapContainerStyle}>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    height: '100%',
+                    backgroundColor: '#f9fafb',
+                    color: '#6b7280',
+                    textAlign: 'center',
+                    padding: '20px'
+                }}>
+                    <p>{errorMessage}</p>
+                </div>
+            </div>
+        );
+    }
 
     return <div ref={mapRef} style={mapContainerStyle} />;
 };

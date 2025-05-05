@@ -43,12 +43,17 @@ const DataTableTab = ({ passThrough }) => {
         );
     }
 
+    // Safely format a numeric value
+    const safeFormat = (value, decimals = 1) => {
+        return value !== null && value !== undefined ? value.toFixed(decimals) : 'N/A';
+    };
+
     return (
         // Main container for the tab's content. Should behave as a block element by default.
         // No explicit width needed here; it should inherit from the parent in GLOSADashboard.
         <div>
-            {/* Signal Group Selection  */ }
-            <div style={{ marginBottom: '24px' ,}}>
+            {/* Signal Group Selection  */}
+            <div style={{ marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>Select Signal Group</h3>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {signalGroupNames.map(name => (
@@ -59,7 +64,7 @@ const DataTableTab = ({ passThrough }) => {
                                 padding: '8px 16px',
                                 backgroundColor: selectedSignalGroup === name ? '#3b82f6' : '#e5e7eb',
                                 color: selectedSignalGroup === name ? 'white' : '#374151',
-                                border: 'none',
+                                borderWidth: '0',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
                                 fontSize: '14px',
@@ -76,7 +81,7 @@ const DataTableTab = ({ passThrough }) => {
             {/* Data Table Card - REMOVED overflow: hidden */}
             {selectedSignalGroup && (
                 <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', padding: '16px', borderBottom: '1px solid #e5e7eb', margin: 0 }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', padding: '16px', borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: '#e5e7eb', margin: 0 }}>
                         Data for Signal Group: {selectedSignalGroup}
                     </h3>
                     {/* This div handles horizontal scrolling *only* for the table */}
@@ -87,7 +92,7 @@ const DataTableTab = ({ passThrough }) => {
                                 borderCollapse: 'collapse',
                                 tableLayout: 'auto', // Allows table to expand based on content
                             }}>
-                                <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 1 }}>
+                                <thead style={{ backgroundColor: '#f9fafb', borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: '#e5e7eb', position: 'sticky', top: 0, zIndex: 1 }}>
                                 <tr>
                                     {/* Status column */}
                                     <th style={{ width: '40px', padding: '12px 8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', color: '#6b7280', letterSpacing: '0.05em' }}></th>
@@ -107,7 +112,9 @@ const DataTableTab = ({ passThrough }) => {
                                     const intervalChanged = metric.greenIntervalChanged;
                                     const rowStyle = {
                                         backgroundColor: intervalChanged ? '#fffbeb' : (i % 2 === 0 ? 'white' : '#f9fafb'),
-                                        borderBottom: '1px solid #e5e7eb',
+                                        borderBottomWidth: '1px',
+                                        borderBottomStyle: 'solid',
+                                        borderBottomColor: '#e5e7eb',
                                         // Removing transition for performance testing if needed
                                         // transition: 'background-color 0.3s ease',
                                     };
@@ -119,9 +126,15 @@ const DataTableTab = ({ passThrough }) => {
                                                 {intervalChanged && <RowChangeIcon title="Green interval changed significantly from previous message" />}
                                             </td>
                                             {/* Data Cells */}
-                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', whiteSpace: 'nowrap' }}>{metric.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 1 })}</td>
-                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>{metric.distance.toFixed(1)}</td>
-                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>{metric.speed.toFixed(1)}</td>
+                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', whiteSpace: 'nowrap' }}>
+                                                {metric.timestamp ? metric.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 1 }) : 'N/A'}
+                                            </td>
+                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>
+                                                {safeFormat(metric.distance)}
+                                            </td>
+                                            <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>
+                                                {safeFormat(metric.speed)}
+                                            </td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151' }}>
                                                 {/* Min width helps prevent this column collapsing too much */}
                                                 <div style={{ minWidth:'120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={metric.glosaAdvice || 'N/A'}>
@@ -129,15 +142,17 @@ const DataTableTab = ({ passThrough }) => {
                                                 </div>
                                             </td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', textAlign: 'right' }}>
-                                                {metric.glosaSpeedKph !== null ? metric.glosaSpeedKph.toFixed(1) : 'N/A'}
+                                                {metric.glosaSpeedKph !== null && metric.glosaSpeedKph !== undefined ? safeFormat(metric.glosaSpeedKph) : 'N/A'}
                                             </td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                                                {metric.minTravelTime !== null && metric.maxTravelTime !== null
+                                                {metric.minTravelTime !== null && metric.minTravelTime !== undefined &&
+                                                metric.maxTravelTime !== null && metric.maxTravelTime !== undefined
                                                     ? `${metric.minTravelTime}/${metric.maxTravelTime}`
                                                     : 'N/A'}
                                             </td>
                                             <td style={{ padding: '10px 16px', fontSize: '14px', color: '#374151', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                                                {(metric.greenStartTime !== null || metric.greenEndTime !== null)
+                                                {(metric.greenStartTime !== null && metric.greenStartTime !== undefined) ||
+                                                (metric.greenEndTime !== null && metric.greenEndTime !== undefined)
                                                     ? `[${metric.greenStartTime ?? '-'}, ${metric.greenEndTime ?? '-'}]`
                                                     : 'N/A'}
                                             </td>
@@ -153,7 +168,7 @@ const DataTableTab = ({ passThrough }) => {
                                                                     {me.minEndTime && <span>MinEnd: {me.minEndTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
                                                                     {me.maxEndTime && <span>MaxEnd: {me.maxEndTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
                                                                     {me.likelyTime && <span>Likely: {me.likelyTime.toLocaleTimeString([],{hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>}
-                                                                    {me.timeConfidence !== null && <span>Conf: {me.timeConfidence}%</span>}
+                                                                    {me.timeConfidence !== null && me.timeConfidence !== undefined && <span>Conf: {me.timeConfidence}%</span>}
                                                                 </div>
                                                             </div>
                                                         ))}

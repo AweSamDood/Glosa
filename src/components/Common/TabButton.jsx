@@ -4,10 +4,11 @@ const TabButton = ({ label, isActive, onClick }) => (
             padding: '16px',
             marginRight: '8px',
             fontWeight: '500',
-            borderBottom: isActive ? '2px solid #3b82f6' : 'none',
+            borderWidth: isActive ? '0 0 2px 0' : '0',
+            borderStyle: isActive ? 'solid' : 'none',
+            borderColor: isActive ? '#3b82f6' : 'transparent',
             color: isActive ? '#3b82f6' : '#6b7280',
             background: 'none',
-            border: 'none',
             cursor: 'pointer'
         }}
         onClick={onClick}
