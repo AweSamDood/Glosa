@@ -1,4 +1,4 @@
-// src/components/SignalGroup/SignalGroupGLOSAAnalysis.jsx
+// src/components/SignalGroup/SignalGroupGLOSAAnalysis.jsx - Updated version
 import {
     CartesianGrid,
     Legend,
@@ -70,6 +70,10 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
         if (advice.includes('cruise')) return '#3b82f6'; // blue
         if (advice.includes('cannotCatchGreen')) return '#f97316'; // orange
         if (advice.includes('willArriveTooEarly')) return '#a855f7'; // purple
+        if (advice.includes('none_movement_event_unavailable')) return '#d1d5db'; // light gray
+        if (advice.includes('none_ttg_unavailable')) return '#d1d5db'; // light gray
+        if (advice.includes('none_green_duration_unavailable')) return '#d1d5db'; // light gray
+        if (advice.includes('none_advice_speed_out_of_range')) return '#d1d5db'; // light gray
         if (advice.includes('none')) return '#9ca3af'; // gray
 
         return '#6b7280'; // default gray
@@ -232,17 +236,13 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
 
                                         {/* Color-coded segments based on advice */}
                                         {Array.from(new Set(chartData.map(d => d.glosaAdvice))).map(advice => (
-                                            <Line
+                                            <Scatter
                                                 key={advice}
                                                 name={advice}
-                                                type="monotone"
                                                 dataKey="distance"
                                                 data={chartData.filter(d => d.glosaAdvice === advice)}
-                                                stroke={getAdviceColor(advice)}
-                                                strokeWidth={3}
-                                                dot={true}
-                                                activeDot={{ r: 6 }}
-                                                connectNulls
+                                                fill={getAdviceColor(advice)}
+                                                shape="circle"
                                             />
                                         ))}
                                     </LineChart>
@@ -299,19 +299,15 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                                             dot={false}
                                         />
 
-                                        {/* Color-coded segments based on advice */}
+                                        {/* Color-coded points based on advice - NO CONNECTING LINES */}
                                         {Array.from(new Set(chartData.map(d => d.glosaAdvice))).map(advice => (
-                                            <Line
+                                            <Scatter
                                                 key={advice}
                                                 name={`Advice: ${advice}`}
-                                                type="monotone"
                                                 dataKey="speed"
                                                 data={chartData.filter(d => d.glosaAdvice === advice)}
-                                                stroke={getAdviceColor(advice)}
-                                                strokeWidth={4}
-                                                dot={true}
-                                                activeDot={{ r: 6 }}
-                                                connectNulls
+                                                fill={getAdviceColor(advice)}
+                                                shape="circle"
                                             />
                                         ))}
                                     </LineChart>
