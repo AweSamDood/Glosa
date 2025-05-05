@@ -6,8 +6,7 @@ import ErrorDisplay from '../Common/ErrorDisplay';
 import NoDataDisplay from '../Common/NoDataDisplay';
 import IntersectionList from '../IntersectionList/IntersectionList';
 import TabButton from '../Common/TabButton';
-import OverviewTab from '../Tabs/OverviewTab';
-import GLOSAAnalysisTab from '../Tabs/GLOSAAnalysisTab';
+import PassDetailsTab from '../Tabs/PassDetailsTab';
 import DataTableTab from '../Tabs/DataTableTab';
 import IntersectionTab from '../Tabs/IntersectionTab';
 import GeneralOverviewTab from '../Tabs/GeneralOverviewTab';
@@ -15,7 +14,7 @@ import GeneralOverviewTab from '../Tabs/GeneralOverviewTab';
 const GLOSADashboard = () => {
     const { intersections, loading, error } = useGlosaData();
     const [selectedPassIndex, setSelectedPassIndex] = useState(null);
-    const [activeTab, setActiveTab] = useState('general'); // Changed default to 'general'
+    const [activeTab, setActiveTab] = useState('general'); // Default to general tab
 
     // Memoize finding the selected pass-through object
     const selectedPass = useMemo(() => {
@@ -75,12 +74,11 @@ const GLOSADashboard = () => {
         }
     }, [loading, error, intersections, selectedPassIndex, selectedPass, activeTab]);
 
-
     const handleSelectPassThrough = (passIndex) => {
         setSelectedPassIndex(passIndex);
-        // If on General Overview, switch to pass overview when selecting a pass
+        // If on General Overview, switch to pass details when selecting a pass
         if (activeTab === 'general') {
-            setActiveTab('overview');
+            setActiveTab('pass-details');
         }
     };
 
@@ -139,16 +137,15 @@ const GLOSADashboard = () => {
                             <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', backgroundColor: 'white', borderRadius: '8px 8px 0 0', padding: '0 16px', flexShrink: 0 }}>
                                 <TabButton label="General Overview" isActive={activeTab === 'general'} onClick={() => handleTabChange('general')} />
                                 <TabButton label="Intersection" isActive={activeTab === 'intersection'} onClick={() => handleTabChange('intersection')} />
-                                <TabButton label="Pass Overview" isActive={activeTab === 'overview'} onClick={() => handleTabChange('overview')} />
-                                <TabButton label="GLOSA Analysis" isActive={activeTab === 'glosa'} onClick={() => handleTabChange('glosa')} />
+                                {/* Combined tab replacing the separate "Pass Overview" and "GLOSA Analysis" tabs */}
+                                <TabButton label="Pass Details" isActive={activeTab === 'pass-details'} onClick={() => handleTabChange('pass-details')} />
                                 <TabButton label="Data Table" isActive={activeTab === 'data'} onClick={() => handleTabChange('data')} />
                             </div>
 
                             {/* Render active tab content */}
                             {activeTab === 'general' && <GeneralOverviewTab intersections={intersections} />}
                             {activeTab === 'intersection' && <IntersectionTab intersection={selectedIntersection} />}
-                            {activeTab === 'overview' && selectedPass && <OverviewTab passThrough={selectedPass} />}
-                            {activeTab === 'glosa' && selectedPass && <GLOSAAnalysisTab passThrough={selectedPass} />}
+                            {activeTab === 'pass-details' && <PassDetailsTab passThrough={selectedPass} />}
                             {activeTab === 'data' && selectedPass && <DataTableTab passThrough={selectedPass} />}
 
                             {/* Show message if pass-through is needed but not selected */}
