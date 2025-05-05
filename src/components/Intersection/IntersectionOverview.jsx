@@ -16,6 +16,46 @@ const IntersectionOverview = ({ intersection }) => {
         passThroughsWithGPSMismatch: 0
     };
 
+    // Helper function to extract ingress ID for a signal group
+    const getIngressForSignalGroup = (sgName) => {
+        let ingress = null;
+
+        // Try to find ingress in each pass-through
+        if (intersection.passThroughs) {
+            for (const pass of intersection.passThroughs) {
+                if (pass.signalGroups && pass.signalGroups[sgName]) {
+                    const metrics = pass.signalGroups[sgName].metrics || [];
+                    for (const metric of metrics) {
+                        if (metric._rawEvent &&
+                            metric._rawEvent.intersectionPass?.intPassInfo?.ingress !== undefined) {
+                            ingress = metric._rawEvent.intersectionPass.intPassInfo.ingress;
+                            return ingress; // Return the first found ingress
+                        }
+                    }
+                }
+            }
+        }
+
+        return ingress;
+    };
+
+    // Group signal groups by ingress
+    const getSignalGroupsByIngress = () => {
+        const groupedSGs = {};
+
+        Object.keys(summary.signalGroupAnalysis || {}).forEach(sgName => {
+            const ingress = getIngressForSignalGroup(sgName) || 'Unknown';
+            if (!groupedSGs[ingress]) {
+                groupedSGs[ingress] = [];
+            }
+            groupedSGs[ingress].push(sgName);
+        });
+
+        return groupedSGs;
+    };
+
+    const signalGroupsByIngress = getSignalGroupsByIngress();
+
     // Prepare data for movement event availability pie chart
     const movementEventData = Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => ({
         name: sgName,
@@ -24,7 +64,8 @@ const IntersectionOverview = ({ intersection }) => {
         none: data.movementEventAvailability.none,
         total: data.movementEventAvailability.available +
             data.movementEventAvailability.unavailable +
-            data.movementEventAvailability.none
+            data.movementEventAvailability.none,
+        ingress: getIngressForSignalGroup(sgName)
     }));
 
     // Prepare data for predicted signal groups chart
@@ -32,7 +73,8 @@ const IntersectionOverview = ({ intersection }) => {
         .map(([sgName, data]) => ({
             signalGroup: sgName,
             count: data.count,
-            percentage: parseFloat(data.percentage)
+            percentage: parseFloat(data.percentage),
+            ingress: getIngressForSignalGroup(sgName)
         }))
         .sort((a, b) => b.count - a.count);
 
@@ -65,12 +107,33 @@ const IntersectionOverview = ({ intersection }) => {
     // Colors for pie chart
     const COLORS = ['#10b981', '#9ca3af', '#ef4444']; // green, gray, red
 
+    // Ingress color mapping - for visual differentiation
+    const INGRESS_COLORS = {
+        1: '#3b82f6', // blue
+        2: '#8b5cf6', // purple
+        3: '#ec4899', // pink
+        4: '#f97316', // orange
+        5: '#22c55e', // green
+        6: '#64748b', // slate
+        7: '#f59e0b', // amber
+        8: '#06b6d4', // cyan
+        9: '#14b8a6', // teal
+        'Unknown': '#9ca3af' // gray
+    };
+
+    // Get color for ingress ID
+    const getIngressColor = (ingress) => {
+        if (ingress === null || ingress === undefined) return INGRESS_COLORS['Unknown'];
+        return INGRESS_COLORS[ingress] || INGRESS_COLORS['Unknown'];
+    };
+
     // Prepare GLOSA advice distribution data
     const glosaAdviceData = Object.entries(summary.signalGroupAnalysis).flatMap(([sgName, data]) =>
         Object.entries(data.glosaAdviceStats || {}).map(([advice, count]) => ({
             signalGroup: sgName,
             advice,
-            count
+            count,
+            ingress: getIngressForSignalGroup(sgName)
         }))
     );
 
@@ -142,6 +205,47 @@ const IntersectionOverview = ({ intersection }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Signal Groups by Ingress ID */}
+            {Object.keys(signalGroupsByIngress).length > 0 && (
+                <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Signal Groups by Ingress</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                        {Object.entries(signalGroupsByIngress).map(([ingress, signalGroups]) => (
+                            <div key={ingress} style={{
+                                backgroundColor: '#f9fafb',
+                                padding: '16px',
+                                borderRadius: '8px',
+                                borderLeftWidth: '4px',
+                                borderLeftStyle: 'solid',
+                                borderLeftColor: getIngressColor(ingress)
+                            }}>
+                                <h4 style={{
+                                    fontSize: '16px',
+                                    fontWeight: '600',
+                                    marginBottom: '12px',
+                                    color: getIngressColor(ingress)
+                                }}>
+                                    Ingress: {ingress}
+                                </h4>
+                                <ul style={{ listStyleType: 'none', padding: '0', margin: '0' }}>
+                                    {signalGroups.map(sgName => (
+                                        <li key={sgName} style={{
+                                            padding: '8px 12px',
+                                            marginBottom: '8px',
+                                            backgroundColor: 'white',
+                                            borderRadius: '4px',
+                                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                                        }}>
+                                            {sgName}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Pass-Through Prediction Analysis */}
             <div style={{ marginBottom: '32px' }}>
@@ -218,14 +322,60 @@ const IntersectionOverview = ({ intersection }) => {
                                     <Tooltip
                                         formatter={(value, name, props) => {
                                             if (name === 'count') {
-                                                return [`${value} (${props.payload.percentage}%)`, 'Passes'];
+                                                const ingressInfo = props.payload.ingress
+                                                    ? ` (Ingress: ${props.payload.ingress})`
+                                                    : '';
+                                                return [`${value} (${props.payload.percentage}%)${ingressInfo}`, 'Passes'];
                                             }
                                             return [value, name];
                                         }}
                                     />
-                                    <Bar dataKey="count" fill="#3b82f6" />
+                                    <Bar
+                                        dataKey="count"
+                                        name="Passes"
+                                        // Use ingress color for bar if available
+                                        fill="#3b82f6"
+                                        // Custom shape to color bars by ingress
+                                        shape={(props) => {
+                                            // Get ingress from the bar's data
+                                            const ingress = props.payload.ingress;
+                                            // Set fill color based on ingress
+                                            const fill = getIngressColor(ingress);
+                                            return <rect
+                                                x={props.x}
+                                                y={props.y}
+                                                width={props.width}
+                                                height={props.height}
+                                                fill={fill}
+                                                stroke="none"
+                                            />;
+                                        }}
+                                    />
                                 </BarChart>
                             </ResponsiveContainer>
+                        </div>
+                        {/* Legend showing ingress colors */}
+                        <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {Object.entries(signalGroupsByIngress).map(([ingress, _]) => (
+                                <div key={ingress} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    backgroundColor: 'white',
+                                    borderRadius: '16px',
+                                    fontSize: '12px',
+                                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                                }}>
+                                    <div style={{
+                                        width: '12px',
+                                        height: '12px',
+                                        borderRadius: '50%',
+                                        backgroundColor: getIngressColor(ingress)
+                                    }}></div>
+                                    <span>Ingress: {ingress}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -282,8 +432,29 @@ const IntersectionOverview = ({ intersection }) => {
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Movement Event Availability</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
                     {movementEventData.map(sg => (
-                        <div key={sg.name} style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                            <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>{sg.name}</h4>
+                        <div key={sg.name} style={{
+                            backgroundColor: '#f9fafb',
+                            padding: '16px',
+                            borderRadius: '8px',
+                            borderLeftWidth: sg.ingress ? '4px' : '0',
+                            borderLeftStyle: sg.ingress ? 'solid' : 'none',
+                            borderLeftColor: getIngressColor(sg.ingress)
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                <h4 style={{ fontSize: '16px', fontWeight: '500', margin: 0 }}>{sg.name}</h4>
+                                {sg.ingress !== undefined && (
+                                    <span style={{
+                                        backgroundColor: '#e5e7eb',
+                                        color: '#4b5563',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        fontSize: '13px',
+                                        fontWeight: '500'
+                                    }}>
+                                        Ingress: {sg.ingress}
+                                    </span>
+                                )}
+                            </div>
                             <div style={{ height: '200px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -327,9 +498,32 @@ const IntersectionOverview = ({ intersection }) => {
 
                             if (sgGlosaData.length === 0) return null;
 
+                            const ingress = getIngressForSignalGroup(sgName);
+
                             return (
-                                <div key={sgName} style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                                    <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>{sgName}</h4>
+                                <div key={sgName} style={{
+                                    backgroundColor: '#f9fafb',
+                                    padding: '16px',
+                                    borderRadius: '8px',
+                                    borderLeftWidth: ingress !== null ? '4px' : '0',
+                                    borderLeftStyle: ingress !== null ? 'solid' : 'none',
+                                    borderLeftColor: getIngressColor(ingress)
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                        <h4 style={{ fontSize: '16px', fontWeight: '500', margin: 0 }}>{sgName}</h4>
+                                        {ingress !== null && (
+                                            <span style={{
+                                                backgroundColor: '#e5e7eb',
+                                                color: '#4b5563',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                fontSize: '13px',
+                                                fontWeight: '500'
+                                            }}>
+                                                Ingress: {ingress}
+                                            </span>
+                                        )}
+                                    </div>
                                     <div style={{ height: '300px' }}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={sgGlosaData}>
@@ -344,7 +538,10 @@ const IntersectionOverview = ({ intersection }) => {
                                                 />
                                                 <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
                                                 <Tooltip />
-                                                <Bar dataKey="count" fill="#3b82f6" />
+                                                <Bar
+                                                    dataKey="count"
+                                                    fill={ingress !== null ? getIngressColor(ingress) : "#3b82f6"}
+                                                />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -363,6 +560,7 @@ const IntersectionOverview = ({ intersection }) => {
                         <thead>
                         <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
                             <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Signal Group</th>
+                            <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Ingress</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Occurrences</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Predicted Uses</th>
                             <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600' }}>Distance Range (m)</th>
@@ -373,9 +571,32 @@ const IntersectionOverview = ({ intersection }) => {
                         <tbody>
                         {Object.entries(summary.signalGroupAnalysis).map(([sgName, data]) => {
                             const predictedData = predictionStats.predictedSignalGroups[sgName];
+                            const ingress = getIngressForSignalGroup(sgName);
+
                             return (
-                                <tr key={sgName} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                <tr key={sgName} style={{
+                                    borderBottomWidth: '1px',
+                                    borderBottomStyle: 'solid',
+                                    borderBottomColor: '#e5e7eb',
+                                    backgroundColor: ingress !== null ? `${getIngressColor(ingress)}10` : 'transparent' // Very light ingress color
+                                }}>
                                     <td style={{ padding: '12px' }}>{sgName}</td>
+                                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                                        {ingress !== null ? (
+                                            <span style={{
+                                                backgroundColor: getIngressColor(ingress),
+                                                color: 'white',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                fontSize: '13px',
+                                                fontWeight: '500'
+                                            }}>
+                                                {ingress}
+                                            </span>
+                                        ) : (
+                                            <span style={{ color: '#9ca3af' }}>-</span>
+                                        )}
+                                    </td>
                                     <td style={{ padding: '12px', textAlign: 'center' }}>{data.totalOccurrences}</td>
                                     <td style={{ padding: '12px', textAlign: 'center' }}>
                                         {predictedData ? `${predictedData.count} (${predictedData.percentage}%)` : '0 (0.0%)'}

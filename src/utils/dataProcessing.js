@@ -136,7 +136,9 @@ export const processPassThrough = (events, passIndex) => {
                 })),
                 // Initialize change flag and type for this specific metric
                 greenIntervalChanged: false,
-                greenChangeType: null
+                greenChangeType: null,
+                // Store the raw event for reference
+                _rawEvent: event
             };
 
             // Extract GLOSA data and Green Interval
@@ -267,6 +269,7 @@ export const processPassThrough = (events, passIndex) => {
                 greenChangeType: null,
                 greenStartTime: null,
                 greenEndTime: null,
+                _rawEvent: sortedEvents[0]
             }],
             hasMovementEvents: false,
             allMovementEventsUnavailable: true,

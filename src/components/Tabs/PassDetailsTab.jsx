@@ -1,5 +1,5 @@
 // src/components/Tabs/PassDetailsTab.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx";
 import SignalGroupGLOSAAnalysis from "../SignalGroup/SignalGroupGLOSAAnalysis.jsx";
 import VehiclePathMap from "../Map/VehiclePathMap.jsx";
@@ -20,7 +20,60 @@ const StabilityIcon = ({ stable, size = 16 }) => {
     );
 };
 
+// Collapsible Section Header Component
+const CollapsibleHeader = ({ title, isExpanded, onToggle, ingress }) => (
+    <div
+        onClick={onToggle}
+        style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 16px',
+            backgroundColor: '#f9fafb',
+            borderRadius: '8px',
+            marginBottom: isExpanded ? '16px' : '8px',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s ease',
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderColor: '#e5e7eb',
+        }}
+    >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>
+                {title}
+            </h3>
+            {ingress !== undefined && (
+                <span style={{
+                    backgroundColor: '#e5e7eb',
+                    color: '#4b5563',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                }}>
+                    Ingress: {ingress}
+                </span>
+            )}
+        </div>
+        <div style={{ color: '#6b7280' }}>
+            {isExpanded ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '20px', height: '20px' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                </svg>
+            ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '20px', height: '20px' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+            )}
+        </div>
+    </div>
+);
+
 const PassDetailsTab = ({ passThrough }) => {
+    // State to track which signal groups are expanded
+    const [expandedGroups, setExpandedGroups] = useState({});
+
     if (!passThrough) {
         return (
             <div style={{ padding: '24px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
@@ -47,6 +100,26 @@ const PassDetailsTab = ({ passThrough }) => {
     const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents || false;
     const possibleGPSMismatch = summary.possibleGPSMismatch || false;
     const greenFoundInRecentEvents = summary.greenFoundInRecentEvents || {};
+
+    // Extract ingress information from the first event if available
+    const ingressById = {};
+    if (passThrough.signalGroups) {
+        Object.values(passThrough.signalGroups).forEach(signalGroup => {
+            // Try to find ingress information in the metrics
+            const firstEvent = signalGroup.metrics?.[0];
+            if (firstEvent && firstEvent._rawEvent && firstEvent._rawEvent.intersectionPass?.intPassInfo?.ingress !== undefined) {
+                ingressById[signalGroup.name] = firstEvent._rawEvent.intersectionPass.intPassInfo.ingress;
+            }
+        });
+    }
+
+    // Toggle expansion state for a signal group
+    const toggleGroupExpansion = (groupName) => {
+        setExpandedGroups(prev => ({
+            ...prev,
+            [groupName]: !prev[groupName]
+        }));
+    };
 
     return (
         <div>
@@ -152,6 +225,19 @@ const PassDetailsTab = ({ passThrough }) => {
                             <div key={index} style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '12px' }}>
                                 <div style={{ fontWeight: '600', color: '#15803d', marginBottom: '4px' }}>
                                     {prediction.signalGroup}
+                                    {ingressById[prediction.signalGroup] !== undefined && (
+                                        <span style={{
+                                            marginLeft: '8px',
+                                            backgroundColor: '#dcfce7',
+                                            color: '#166534',
+                                            padding: '1px 6px',
+                                            borderRadius: '12px',
+                                            fontSize: '13px',
+                                            fontWeight: '500'
+                                        }}>
+                                            Ingress: {ingressById[prediction.signalGroup]}
+                                        </span>
+                                    )}
                                 </div>
                                 <div style={{ fontSize: '14px', color: '#166534' }}>
                                     {prediction.reason}
@@ -184,19 +270,35 @@ const PassDetailsTab = ({ passThrough }) => {
                 </div>
             )}
 
-            {/* Signal Group Analysis and GLOSA Analysis */}
+            {/* Signal Group Analysis Section */}
             {passThrough.signalGroups && Object.keys(passThrough.signalGroups).length > 0 ? (
                 <>
                     <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Signal Group Analysis</h2>
-                    {Object.values(passThrough.signalGroups).map(signalGroup => (
-                        <div key={signalGroup.name}>
-                            {/* Signal Group Overview */}
-                            <SignalGroupOverview signalGroup={signalGroup} />
+                    {Object.values(passThrough.signalGroups).map(signalGroup => {
+                        const isExpanded = expandedGroups[signalGroup.name] !== false; // Default to expanded
+                        const ingress = ingressById[signalGroup.name];
 
-                            {/* GLOSA Analysis for the same signal group */}
-                            <SignalGroupGLOSAAnalysis signalGroup={signalGroup} />
-                        </div>
-                    ))}
+                        return (
+                            <div key={signalGroup.name} style={{ marginBottom: '24px' }}>
+                                <CollapsibleHeader
+                                    title={`Signal Group: ${signalGroup.name}`}
+                                    isExpanded={isExpanded}
+                                    onToggle={() => toggleGroupExpansion(signalGroup.name)}
+                                    ingress={ingress}
+                                />
+
+                                {isExpanded && (
+                                    <>
+                                        {/* Signal Group Overview */}
+                                        <SignalGroupOverview signalGroup={signalGroup} />
+
+                                        {/* GLOSA Analysis for the same signal group */}
+                                        <SignalGroupGLOSAAnalysis signalGroup={signalGroup} />
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
                 </>
             ) : (
                 <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px' }}>
