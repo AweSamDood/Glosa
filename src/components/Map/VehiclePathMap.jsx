@@ -136,8 +136,8 @@ const VehiclePathMap = ({ passThrough }) => {
                 }).addTo(map)
                     .bindPopup(`Intersection: ${endPoint.timestamp.toLocaleTimeString()}<br>Speed: ${endPoint.speed.toFixed(1)} km/h`);
 
-                // Add intermediate markers for significant points (e.g., every few points)
-                const markEvery = Math.max(1, Math.floor(pathCoordinates.length / 5)); // At most 5 markers
+                // Add intermediate markers for every point
+                const markEvery = 1;
                 for (let i = 1; i < pathCoordinates.length - 1; i += markEvery) {
                     const point = pathCoordinates[i];
                     L.circleMarker([point.lat, point.lng], {
@@ -175,7 +175,6 @@ const VehiclePathMap = ({ passThrough }) => {
                 errorDiv.style.height = '100%';
                 errorDiv.style.width = '100%';
                 errorRef.current = errorDiv;
-
                 // Clear map container first
                 mapRef.current.innerHTML = '';
                 mapRef.current.appendChild(errorDiv);
