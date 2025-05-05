@@ -99,9 +99,47 @@ const IntersectionOverview = ({ intersection }) => {
                 </div>
                 <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Green Interval Changes</h3>
-                    <p style={{ fontSize: '24px', fontWeight: '600', color: summary.greenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
-                        {summary.greenIntervalChanges}
-                    </p>
+                    <div>
+                        <p style={{ fontSize: '24px', fontWeight: '600', color: summary.greenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
+                            {summary.greenIntervalChanges}
+                        </p>
+                        {summary.greenIntervalChanges > 0 && summary.greenChangeTypes && (
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                {summary.greenChangeTypes.lostGreen > 0 && (
+                                    <span style={{
+                                        fontSize: '12px',
+                                        color: 'white',
+                                        backgroundColor: '#ef4444',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                    }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '12px', height: '12px', marginRight: '4px' }}>
+                                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                            </svg>
+                            Lost: {summary.greenChangeTypes.lostGreen}
+                        </span>
+                                )}
+                                {summary.greenChangeTypes.gotGreen > 0 && (
+                                    <span style={{
+                                        fontSize: '12px',
+                                        color: 'white',
+                                        backgroundColor: '#22c55e',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                    }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '12px', height: '12px', marginRight: '4px' }}>
+                                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                            </svg>
+                            Got: {summary.greenChangeTypes.gotGreen}
+                        </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -349,9 +387,41 @@ const IntersectionOverview = ({ intersection }) => {
                                         {data.speedRange.min.toFixed(1)} - {data.speedRange.max.toFixed(1)}
                                     </td>
                                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                                        <span style={{ color: data.greenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
-                                            {data.greenIntervalChanges}
-                                        </span>
+                                        {data.greenIntervalChanges > 0 ? (
+                                            <div>
+                                    <span style={{ color: data.greenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
+                                        {data.greenIntervalChanges}
+                                    </span>
+                                                {data.greenChangeTypes && (
+                                                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px', justifyContent: 'center' }}>
+                                                        {data.greenChangeTypes.lostGreen > 0 && (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                color: 'white',
+                                                                backgroundColor: '#ef4444',
+                                                                padding: '1px 4px',
+                                                                borderRadius: '4px'
+                                                            }}>
+                                                    Lost: {data.greenChangeTypes.lostGreen}
+                                                </span>
+                                                        )}
+                                                        {data.greenChangeTypes.gotGreen > 0 && (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                color: 'white',
+                                                                backgroundColor: '#22c55e',
+                                                                padding: '1px 4px',
+                                                                borderRadius: '4px'
+                                                            }}>
+                                                    Got: {data.greenChangeTypes.gotGreen}
+                                                </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span style={{ color: '#10b981' }}>0</span>
+                                        )}
                                     </td>
                                 </tr>
                             );

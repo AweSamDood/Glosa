@@ -2,18 +2,36 @@
 import React from 'react';
 import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx";
 
-// Icon for stability status
-const StabilityIcon = ({ stable, size = 16 }) => {
-    const color = stable ? '#10b981' : '#f97316'; // Green for stable, Orange for changed
-    const title = stable ? 'Green intervals remained stable' : 'Significant green interval change detected';
+// Icon for stability status - updated to handle specific change types
+const StabilityIcon = ({ status, size = 16 }) => {
+    let color, title, path;
+
+    switch(status) {
+        case 'stable':
+            color = '#10b981'; // Green for stable
+            title = 'Green intervals remained stable';
+            path = <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />;
+            break;
+        case 'lostGreen':
+            color = '#ef4444'; // Red for lost green
+            title = 'Green intervals were reduced or disappeared';
+            path = <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clipRule="evenodd" />;
+            break;
+        case 'gotGreen':
+            color = '#22c55e'; // Brighter green for got green
+            title = 'Green intervals were extended or appeared';
+            path = <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clipRule="evenodd" />;
+            break;
+        case 'changed':
+        default:
+            color = '#f97316'; // Orange for mixed or unspecified changes
+            title = 'Significant green interval changes detected';
+            path = <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />;
+    }
 
     return (
         <svg title={title} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: `${size}px`, height: `${size}px`, color: color, verticalAlign: 'middle', marginLeft: '8px' }}>
-            {stable ? (
-                <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
-            ) : (
-                <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />
-            )}
+            {path}
         </svg>
     );
 };
@@ -31,7 +49,34 @@ const OverviewTab = ({ passThrough }) => {
     const movementEventsStatus = hasMovementEvents
         ? (summary.allMovementEventsUnavailable ? 'Present (Unavailable)' : 'Available')
         : 'None Found';
-    const greenIntervalStable = !(summary.significantGreenIntervalChangeOccurred ?? false);
+
+    // Update green interval stability logic to use change types
+    const greenIntervalChanged = summary.significantGreenIntervalChangeOccurred ?? false;
+    const greenChangeTypes = summary.greenChangeTypes || { lostGreen: 0, gotGreen: 0 };
+
+    // Determine stability status based on change types
+    let stabilityStatus = 'stable';
+    let stabilityText = 'Stable';
+
+    if (greenIntervalChanged) {
+        const lostCount = greenChangeTypes.lostGreen || 0;
+        const gotCount = greenChangeTypes.gotGreen || 0;
+
+        if (lostCount > 0 && gotCount === 0) {
+            stabilityStatus = 'lostGreen';
+            stabilityText = `Lost Green (${lostCount} times)`;
+        } else if (gotCount > 0 && lostCount === 0) {
+            stabilityStatus = 'gotGreen';
+            stabilityText = `Got Green (${gotCount} times)`;
+        } else if (lostCount > 0 && gotCount > 0) {
+            stabilityStatus = 'changed';
+            stabilityText = `Mixed Changes (${lostCount} lost, ${gotCount} got)`;
+        } else {
+            stabilityStatus = 'changed';
+            stabilityText = 'Changed';
+        }
+    }
+
     const predictedSignalGroups = summary.predictedSignalGroupsUsed || [];
     const hasNoGreenWarning = summary.hasNoPredictedGreensWithAvailableEvents || false;
     const possibleGPSMismatch = summary.possibleGPSMismatch || false;
@@ -50,8 +95,8 @@ const OverviewTab = ({ passThrough }) => {
                     <span style={{ fontWeight: '500' }}>Movement events:</span> <span>{movementEventsStatus}</span>
                     <span style={{ fontWeight: '500' }}>Green Interval Stability:</span>
                     <span>
-                        {greenIntervalStable ? 'Stable' : 'Changed'}
-                        <StabilityIcon stable={greenIntervalStable} />
+                        {stabilityText}
+                        <StabilityIcon status={stabilityStatus} />
                     </span>
                 </div>
             </div>

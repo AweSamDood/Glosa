@@ -16,10 +16,27 @@ export const calculateSignalGroupSummary = (metrics) => {
             speedRange: { min: 0, max: 0, avg: 0 },
             glosaAdvice: {},
             clearanceTypes: {},
-            // Add default for new summary field
             greenIntervalChangesDetected: 0,
+            // Add new fields for change types
+            greenChangeTypes: {
+                lostGreen: 0,
+                gotGreen: 0
+            }
         };
     }
+
+    // Track green change types
+    const greenChangeTypes = {
+        lostGreen: 0,
+        gotGreen: 0
+    };
+
+    // Count changes by type
+    metrics.filter(m => m.greenIntervalChanged).forEach(m => {
+        if (m.greenChangeType && greenChangeTypes[m.greenChangeType] !== undefined) {
+            greenChangeTypes[m.greenChangeType]++;
+        }
+    });
 
     const summary = {
         distanceRange: {
@@ -35,12 +52,14 @@ export const calculateSignalGroupSummary = (metrics) => {
         clearanceTypes: countOccurrences(metrics.filter(m => m.clearanceCalType).map(m => m.clearanceCalType)),
         // Count how many metrics detected a change from the previous one
         greenIntervalChangesDetected: metrics.filter(m => m.greenIntervalChanged).length,
+        // Add the green change types to the summary
+        greenChangeTypes: greenChangeTypes
     };
 
     return summary;
 };
 
-// --- Updated processPassThrough with Green Interval Change Detection ---
+// --- Updated processPassThrough with Enhanced Green Interval Change Detection ---
 export const processPassThrough = (events, passIndex) => {
     const uuid = events[0]?.uuid || `pass-${passIndex}`;
     const firstTimestamp = events[0]?.dt ? new Date(events[0].dt) : new Date();
@@ -49,6 +68,12 @@ export const processPassThrough = (events, passIndex) => {
     let foundAnySignalGroup = false;
     let significantGreenIntervalChangeOccurred = false; // Flag for the entire pass
     const previousSignalGroupGreenIntervals = {}; // Track previous { start, end, timestamp } per SG
+
+    // New tracking for change types
+    const greenChangeTypes = {
+        lostGreen: 0,
+        gotGreen: 0
+    };
 
     // Sort events by timestamp to ensure sequential processing
     const sortedEvents = [...events].sort((a, b) => new Date(a.dt) - new Date(b.dt));
@@ -70,6 +95,11 @@ export const processPassThrough = (events, passIndex) => {
                     metrics: [],
                     hasMovementEvents: false,
                     allMovementEventsUnavailable: true,
+                    // Add tracking for green change types per signal group
+                    greenChangeTypes: {
+                        lostGreen: 0,
+                        gotGreen: 0
+                    }
                 };
             }
 
@@ -104,8 +134,9 @@ export const processPassThrough = (events, passIndex) => {
                     nextTime: me.nextTime && me.nextTime !== "1970-01-01T00:00:00Z" ? new Date(me.nextTime) : null,
                     timeConfidence: me.timeConfidence ?? null
                 })),
-                // Initialize change flag for this specific metric
-                greenIntervalChanged: false
+                // Initialize change flag and type for this specific metric
+                greenIntervalChanged: false,
+                greenChangeType: null
             };
 
             // Extract GLOSA data and Green Interval
@@ -137,7 +168,7 @@ export const processPassThrough = (events, passIndex) => {
 
             if (eventIndex > 0 && previousIntervalData) { // Can only compare if not the first event and previous data exists
                 const timeDiffSeconds = (currentTimestamp.getTime() - previousIntervalData.timestamp.getTime()) / 1000;
-                const bufferSeconds = 2.0;
+                const bufferSeconds = 3.0; // CHANGED from 2.0 to 3.0
                 // Threshold allows for time passage + buffer
                 const threshold = Math.max(0, timeDiffSeconds) + bufferSeconds; // Ensure threshold is non-negative
 
@@ -146,38 +177,59 @@ export const processPassThrough = (events, passIndex) => {
 
                 let startChanged = false;
                 let endChanged = false;
+                let changeType = null; // Track the type of change
 
                 // Check start time change
                 if (currentGreenStart === null && prevStart !== null) {
                     startChanged = true; // Disappeared
+                    changeType = "lostGreen"; // Lost green phase
                 } else if (currentGreenStart !== null && prevStart === null) {
                     startChanged = true; // Appeared
+                    changeType = "gotGreen"; // Got new green phase
                 } else if (currentGreenStart !== null && prevStart !== null) {
                     if (Math.abs(currentGreenStart - prevStart) > threshold) {
                         startChanged = true;
+                        // If new start is earlier, we "got green" (more green), otherwise "lost green"
+                        changeType = currentGreenStart < prevStart ? "gotGreen" : "lostGreen";
                     }
                 }
 
-                // Check end time change
+                // Check end time change (only set change type if not already set by start change)
                 if (currentGreenEnd === null && prevEnd !== null) {
                     endChanged = true; // Disappeared
+                    if (!changeType) changeType = "lostGreen"; // Lost green phase
                 } else if (currentGreenEnd !== null && prevEnd === null) {
                     endChanged = true; // Appeared
+                    if (!changeType) changeType = "gotGreen"; // Got new green phase
                 } else if (currentGreenEnd !== null && prevEnd !== null) {
                     if (Math.abs(currentGreenEnd - prevEnd) > threshold) {
                         endChanged = true;
+                        // If new end is later, we "got green" (more green), otherwise "lost green"
+                        if (!changeType) changeType = currentGreenEnd > prevEnd ? "gotGreen" : "lostGreen";
                     }
                 }
 
                 if (startChanged || endChanged) {
                     metric.greenIntervalChanged = true; // Mark this metric
+                    metric.greenChangeType = changeType; // Store the change type in the metric
                     significantGreenIntervalChangeOccurred = true; // Mark the whole pass
+
+                    // Update the counts for the specific signal group
+                    if (changeType && signalGroupsData[sgName].greenChangeTypes) {
+                        signalGroupsData[sgName].greenChangeTypes[changeType]++;
+                    }
+
+                    // Update the overall counts
+                    if (changeType) {
+                        greenChangeTypes[changeType]++;
+                    }
+
                     // Optional console log for debugging:
                     // console.log(`Change detected for SG ${sgName} at ${currentTimestamp.toISOString()}`);
                     // console.log(`  Prev: [${prevStart}, ${prevEnd}] @ ${previousIntervalData.timestamp.toISOString()}`);
                     // console.log(`  Curr: [${currentGreenStart}, ${currentGreenEnd}] @ ${currentTimestamp.toISOString()}`);
                     // console.log(`  Diff: ${timeDiffSeconds.toFixed(1)}s, Threshold: ${threshold.toFixed(1)}s`);
-                    // console.log(`  Start Changed: ${startChanged}, End Changed: ${endChanged}`);
+                    // console.log(`  Start Changed: ${startChanged}, End Changed: ${endChanged}, Type: ${changeType}`);
                 }
             }
 
@@ -212,13 +264,16 @@ export const processPassThrough = (events, passIndex) => {
                 glosaAdvice: 'none',
                 movementEvents: [],
                 greenIntervalChanged: false, // Default for dummy metric
+                greenChangeType: null,
                 greenStartTime: null,
                 greenEndTime: null,
             }],
             hasMovementEvents: false,
-            allMovementEventsUnavailable: true
+            allMovementEventsUnavailable: true,
+            greenChangeTypes: { lostGreen: 0, gotGreen: 0 }
         };
     }
+
     // Analyze the last 3 messages to predict which signal groups were used for passage
     const predictedSignalGroupsUsed = [];
     const greenFoundInRecentEvents = {}; // Track which signal groups had green in last 3 events
@@ -284,7 +339,7 @@ export const processPassThrough = (events, passIndex) => {
     // New flag to indicate possible GPS mismatch
     const possibleGPSMismatch = hasNoPredictedGreensWithAvailableEvents && foundGreenInPreviousEvents;
 
-    // Update the summary object
+    // Update the summary object with new green change type information
     const summary = {
         eventCount: sortedEvents.length,
         timeRange: {
@@ -296,6 +351,7 @@ export const processPassThrough = (events, passIndex) => {
             !sg.hasMovementEvents || sg.allMovementEventsUnavailable
         ),
         significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred,
+        greenChangeTypes: greenChangeTypes, // Add the green change types
         predictedSignalGroupsUsed: predictedSignalGroupsUsed,
         hasNoPredictedGreensWithAvailableEvents: hasNoPredictedGreensWithAvailableEvents,
         // Add new flags
@@ -315,10 +371,9 @@ export const processPassThrough = (events, passIndex) => {
         uuid,
         timestamp: firstTimestamp,
         signalGroups: finalSignalGroups,
-        summary // Contains the new significantGreenIntervalChangeOccurred flag
+        summary // Contains the new green change type information
     };
 };
-
 export const calculateIntersectionSummary = (intersection) => {
     if (!intersection || !intersection.passThroughs || intersection.passThroughs.length === 0) {
         return {
@@ -333,6 +388,12 @@ export const calculateIntersectionSummary = (intersection) => {
                 passThroughsWithPredictions: 0,
                 passThroughsWithNoGreenWarning: 0,
                 passThroughsWithGPSMismatch: 0
+            },
+            // Add green change types
+            greenIntervalChanges: 0,
+            greenChangeTypes: {
+                lostGreen: 0,
+                gotGreen: 0
             }
         };
     }
@@ -349,6 +410,11 @@ export const calculateIntersectionSummary = (intersection) => {
         speedPatterns: [],
         stopLocations: [],
         greenIntervalChanges: 0,
+        // Add change types tracking
+        greenChangeTypes: {
+            lostGreen: 0,
+            gotGreen: 0
+        },
         // Add prediction statistics
         predictionStatistics: {
             predictedSignalGroups: {},
@@ -365,9 +431,15 @@ export const calculateIntersectionSummary = (intersection) => {
     const passThroughStops = new Map(); // Track stops per pass-through: Key: "passIndex-distanceBucket", Value: [{ signalGroups, timestamp }]
 
     passThroughs.forEach((passThrough, passIndex) => {
-        // Count green interval changes
+        // Count green interval changes and track change types
         if (passThrough.summary?.significantGreenIntervalChangeOccurred) {
             summary.greenIntervalChanges++;
+
+            // Count by change type if available
+            if (passThrough.summary?.greenChangeTypes) {
+                summary.greenChangeTypes.lostGreen += passThrough.summary.greenChangeTypes.lostGreen || 0;
+                summary.greenChangeTypes.gotGreen += passThrough.summary.greenChangeTypes.gotGreen || 0;
+            }
         }
 
         // Analyze predicted signal groups
@@ -405,7 +477,12 @@ export const calculateIntersectionSummary = (intersection) => {
                     movementEventAvailability: { available: 0, unavailable: 0, none: 0 },
                     distanceRange: { min: Infinity, max: -Infinity },
                     speedRange: { min: Infinity, max: -Infinity },
-                    greenIntervalChanges: 0
+                    greenIntervalChanges: 0,
+                    // Add change types for signal group
+                    greenChangeTypes: {
+                        lostGreen: 0,
+                        gotGreen: 0
+                    }
                 };
             }
 
@@ -435,9 +512,14 @@ export const calculateIntersectionSummary = (intersection) => {
                 sgAnalysis.speedRange.min = Math.min(sgAnalysis.speedRange.min, metric.speed);
                 sgAnalysis.speedRange.max = Math.max(sgAnalysis.speedRange.max, metric.speed);
 
-                // Count green interval changes
+                // Count green interval changes and track change types
                 if (metric.greenIntervalChanged) {
                     sgAnalysis.greenIntervalChanges++;
+
+                    // Track change type
+                    if (metric.greenChangeType && sgAnalysis.greenChangeTypes[metric.greenChangeType] !== undefined) {
+                        sgAnalysis.greenChangeTypes[metric.greenChangeType]++;
+                    }
                 }
 
                 // Detect potential stops (speed < 2 km/h)
