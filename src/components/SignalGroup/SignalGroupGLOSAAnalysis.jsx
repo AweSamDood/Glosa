@@ -199,6 +199,44 @@ const SignalGroupGLOSAAnalysis = ({ signalGroup }) => {
                                 </ResponsiveContainer>
                             </div>
                         </div>
+                        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px' }}>
+                            <h5 style={{ fontSize: '14px', fontWeight: '500', marginBottom: '12px' }}>GLOSA Advice vs Time</h5>
+                            <div style={{ height: '350px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 50 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis
+                                            type="number"
+                                            dataKey="time"
+                                            name="Time"
+                                            label={{ value: 'Time (seconds from start)', position: 'insideBottom', offset: -10 }}
+                                            domain={[0, 'auto']}
+                                        />
+                                        <YAxis
+                                            type="number"
+                                            dataKey="speed"
+                                            name="Speed"
+                                            label={{ value: 'Speed (km/h)', angle: -90, position: 'insideLeft' }}
+                                            tickFormatter={(value) => value.toFixed(0)}
+                                        />
+                                        <Tooltip
+                                            formatter={tooltipFormatter}
+                                            labelFormatter={(value) => `Time: ${value.toFixed(1)}s`}
+                                        />
+                                        <Legend verticalAlign="top" height={36} />
+                                        {/* Group data by glosaAdvice */}
+                                        {Array.from(new Set(chartData.map(d => d.glosaAdvice))).map(advice => (
+                                            <Scatter
+                                                key={advice}
+                                                name={advice}
+                                                data={chartData.filter(d => d.glosaAdvice === advice)}
+                                                fill={getAdviceColor(advice)}
+                                            />
+                                        ))}
+                                    </ScatterChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
 
                         {/* Chart 2: Time-Distance with Green Window */}
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
