@@ -8,6 +8,93 @@ export const countOccurrences = (arr) => {
     return counts;
 };
 
+// Add this function at the top level of the file
+function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
+    if (!datapoint1Events || !datapoint2Events ||
+        datapoint1Events.length === 0 || datapoint2Events.length === 0) {
+        return { isStable: false, reason: "insufficient_data" };
+    }
+
+    // Extract phase types and end times from both datapoints
+    const extractPhaseInfo = (events) => {
+        return events.map(event => ({
+            phase: event.state,
+            endTime: event.likelyTime || event.minEndTime
+        }));
+    };
+
+    const dp1Phases = extractPhaseInfo(datapoint1Events);
+    const dp2Phases = extractPhaseInfo(datapoint2Events);
+
+    // Case 1: Check if phases have same sequence
+    let sameSequence = true;
+    if (dp1Phases.length === dp2Phases.length) {
+        for (let i = 0; i < dp1Phases.length; i++) {
+            if (dp1Phases[i].phase !== dp2Phases[i].phase) {
+                sameSequence = false;
+                break;
+            }
+        }
+
+        if (sameSequence) {
+            // Compare timing of corresponding phases
+            let timingDifferences = [];
+            for (let i = 0; i < dp1Phases.length; i++) {
+                if (dp1Phases[i].endTime && dp2Phases[i].endTime) {
+                    const timeDiff = Math.abs(
+                        new Date(dp2Phases[i].endTime) - new Date(dp1Phases[i].endTime)
+                    ) / 1000; // in seconds
+
+                    timingDifferences.push(timeDiff);
+                }
+            }
+
+            // If any significant differences in timing, it's not stable
+            const maxDiff = Math.max(...timingDifferences);
+            if (maxDiff > 5) { // 5-second threshold for significant change
+                return { isStable: false, reason: "timing_shifted", maxDifference: maxDiff };
+            }
+
+            return { isStable: true, reason: "same_sequence_and_timing" };
+        }
+    }
+
+    // Case 2: Check if phases are shifted by one
+    let shiftedByOne = true;
+    if (dp1Phases.length > 0 && dp2Phases.length > 0) {
+        for (let i = 0; i < Math.min(dp1Phases.length, dp2Phases.length - 1); i++) {
+            if (dp1Phases[i].phase !== dp2Phases[i + 1].phase) {
+                shiftedByOne = false;
+                break;
+            }
+        }
+
+        if (shiftedByOne) {
+            // This is a natural phase progression
+            return { isStable: true, reason: "natural_phase_progression" };
+        }
+    }
+
+    // Case 3: Check if phases are shifted by one in the other direction
+    let shiftedByOneReverse = true;
+    if (dp1Phases.length > 1 && dp2Phases.length > 0) {
+        for (let i = 0; i < Math.min(dp1Phases.length - 1, dp2Phases.length); i++) {
+            if (dp1Phases[i + 1].phase !== dp2Phases[i].phase) {
+                shiftedByOneReverse = false;
+                break;
+            }
+        }
+
+        if (shiftedByOneReverse) {
+            // This is a natural phase progression in reverse
+            return { isStable: true, reason: "natural_phase_progression_reverse" };
+        }
+    }
+
+    // If we get here, the phases don't match in any expected pattern
+    return { isStable: false, reason: "pattern_mismatch" };
+}
+
 export const calculateSignalGroupSummary = (metrics) => {
     // Skip if no metrics
     if (!metrics || metrics.length === 0) {
@@ -68,6 +155,8 @@ export const processPassThrough = (events, passIndex) => {
     let foundAnySignalGroup = false;
     let significantGreenIntervalChangeOccurred = false; // Flag for the entire pass
     const previousSignalGroupGreenIntervals = {}; // Track previous { start, end, timestamp } per SG
+    const previousSignalGroupMovementEvents = {};
+
 
     // New tracking for change types
     const greenChangeTypes = {
@@ -211,27 +300,34 @@ export const processPassThrough = (events, passIndex) => {
                     }
                 }
 
+                // In the place where green interval changes are detected:
                 if (startChanged || endChanged) {
-                    metric.greenIntervalChanged = true; // Mark this metric
-                    metric.greenChangeType = changeType; // Store the change type in the metric
-                    significantGreenIntervalChangeOccurred = true; // Mark the whole pass
+                    // Check if movement events show this is just a natural progression
+                    const stabilityCheck = checkGreenIntervalStability(
+                        previousSignalGroupMovementEvents[sgName],
+                        metric.movementEvents
+                    );
 
-                    // Update the counts for the specific signal group
-                    if (changeType && signalGroupsData[sgName].greenChangeTypes) {
-                        signalGroupsData[sgName].greenChangeTypes[changeType]++;
+                    if (stabilityCheck.isStable) {
+                        // Even though green interval appears to have changed,
+                        // the movement event pattern shows this is stable
+                        metric.greenIntervalChanged = false;
+                        metric.greenChangeType = null;
+                    } else {
+                        // This is a genuine change
+                        metric.greenIntervalChanged = true;
+                        metric.greenChangeType = changeType;
+                        significantGreenIntervalChangeOccurred = true;
+
+                        // Update counts as before
+                        if (changeType && signalGroupsData[sgName].greenChangeTypes) {
+                            signalGroupsData[sgName].greenChangeTypes[changeType]++;
+                        }
+
+                        if (changeType) {
+                            greenChangeTypes[changeType]++;
+                        }
                     }
-
-                    // Update the overall counts
-                    if (changeType) {
-                        greenChangeTypes[changeType]++;
-                    }
-
-                    // Optional console log for debugging:
-                    // console.log(`Change detected for SG ${sgName} at ${currentTimestamp.toISOString()}`);
-                    // console.log(`  Prev: [${prevStart}, ${prevEnd}] @ ${previousIntervalData.timestamp.toISOString()}`);
-                    // console.log(`  Curr: [${currentGreenStart}, ${currentGreenEnd}] @ ${currentTimestamp.toISOString()}`);
-                    // console.log(`  Diff: ${timeDiffSeconds.toFixed(1)}s, Threshold: ${threshold.toFixed(1)}s`);
-                    // console.log(`  Start Changed: ${startChanged}, End Changed: ${endChanged}, Type: ${changeType}`);
                 }
             }
 
