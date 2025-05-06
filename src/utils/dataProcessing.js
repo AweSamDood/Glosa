@@ -51,7 +51,7 @@ function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
 
             // If any significant differences in timing, it's not stable
             const maxDiff = Math.max(...timingDifferences);
-            if (maxDiff > 5) { // 5-second threshold for significant change
+            if (maxDiff > 2 ) { // 2-second threshold for significant change
                 return { isStable: false, reason: "timing_shifted", maxDifference: maxDiff };
             }
 
@@ -313,6 +313,7 @@ export const processPassThrough = (events, passIndex) => {
                         // the movement event pattern shows this is stable
                         metric.greenIntervalChanged = false;
                         metric.greenChangeType = null;
+                        console.log(`Green interval change detected but stable: ${sgName} - ${stabilityCheck.reason}`);
                     } else {
                         // This is a genuine change
                         metric.greenIntervalChanged = true;
