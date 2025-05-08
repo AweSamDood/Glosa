@@ -117,9 +117,24 @@ const GLOSADashboard = () => {
             {/* Main Content Area: Takes remaining space, internal flex column layout */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' /* Prevents this container from scrolling */ }}>
                 {/* Header: Fixed height */}
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', padding: '20px 24px', color: '#111827', borderBottom: '1px solid #e5e7eb', flexShrink: 0, backgroundColor: 'white' }}>
-                    GLOSA Analysis Dashboard
-                </h1>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', color: '#111827', borderBottom: '1px solid #e5e7eb', flexShrink: 0, backgroundColor: 'white' }}>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0' }}>
+                        GLOSA Analysis Dashboard
+                    </h1>
+                    {/* Show dataset name if available */}
+                    {import.meta.env.VITE_INSTANCE_NAME && (
+                        <div style={{
+                            backgroundColor: '#e0f2fe',
+                            color: '#0369a1',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                        }}>
+                            {import.meta.env.VITE_INSTANCE_NAME}
+                        </div>
+                    )}
+                </div>
 
                 {/* Scrollable Content Area: Takes remaining vertical space, scrolls vertically */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>

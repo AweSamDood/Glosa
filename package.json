@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:dataset1": "vite --port 3000 --mode dataset1",
+    "dev:dataset2": "vite --port 3001 --mode dataset2",
     "build": "vite build",
+    "build:dataset1": "vite build --mode dataset1",
+    "build:dataset2": "vite build --mode dataset2",
     "lint": "eslint .",
     "preview": "vite preview"
   },
