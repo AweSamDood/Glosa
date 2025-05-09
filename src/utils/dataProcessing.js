@@ -12,7 +12,7 @@ export const countOccurrences = (arr) => {
 function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
     if (!datapoint1Events || !datapoint2Events ||
         datapoint1Events.length === 0 || datapoint2Events.length === 0) {
-        return { isStable: false, reason: "insufficient_data" };
+        return {isStable: false, reason: "insufficient_data"};
     }
 
     // Extract phase types and end times from both datapoints
@@ -51,11 +51,11 @@ function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
 
             // If any significant differences in timing, it's not stable
             const maxDiff = Math.max(...timingDifferences);
-            if (maxDiff > 2 ) { // 2-second threshold for significant change
-                return { isStable: false, reason: "timing_shifted", maxDifference: maxDiff };
+            if (maxDiff > 2) { // 2-second threshold for significant change
+                return {isStable: false, reason: "timing_shifted", maxDifference: maxDiff};
             }
 
-            return { isStable: true, reason: "same_sequence_and_timing" };
+            return {isStable: true, reason: "same_sequence_and_timing"};
         }
     }
 
@@ -71,7 +71,7 @@ function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
 
         if (shiftedByOne) {
             // This is a natural phase progression
-            return { isStable: true, reason: "natural_phase_progression" };
+            return {isStable: true, reason: "natural_phase_progression"};
         }
     }
 
@@ -87,20 +87,20 @@ function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
 
         if (shiftedByOneReverse) {
             // This is a natural phase progression in reverse
-            return { isStable: true, reason: "natural_phase_progression_reverse" };
+            return {isStable: true, reason: "natural_phase_progression_reverse"};
         }
     }
 
     // If we get here, the phases don't match in any expected pattern
-    return { isStable: false, reason: "pattern_mismatch" };
+    return {isStable: false, reason: "pattern_mismatch"};
 }
 
 export const calculateSignalGroupSummary = (metrics) => {
     // Skip if no metrics
     if (!metrics || metrics.length === 0) {
         return {
-            distanceRange: { min: 0, max: 0 },
-            speedRange: { min: 0, max: 0, avg: 0 },
+            distanceRange: {min: 0, max: 0},
+            speedRange: {min: 0, max: 0, avg: 0},
             glosaAdvice: {},
             clearanceTypes: {},
             greenIntervalChangesDetected: 0,
@@ -114,8 +114,10 @@ export const calculateSignalGroupSummary = (metrics) => {
 
     // Track green change types
     const greenChangeTypes = {
-        lostGreen: 0,
-        gotGreen: 0
+        earlierGreenStart: 0, // Positive: Green starts earlier
+        extendedGreenEnd: 0,  // Positive: Green ends later
+        laterGreenStart: 0,   // Negative: Green starts later
+        shortenedGreenEnd: 0  // Negative: Green ends earlier
     };
 
     // Count changes by type
@@ -160,8 +162,10 @@ export const processPassThrough = (events, passIndex) => {
 
     // New tracking for change types
     const greenChangeTypes = {
-        lostGreen: 0,
-        gotGreen: 0
+        earlierGreenStart: 0,
+        extendedGreenEnd: 0,
+        laterGreenStart: 0,
+        shortenedGreenEnd: 0
     };
 
     // Sort events by timestamp to ensure sequential processing
@@ -186,8 +190,10 @@ export const processPassThrough = (events, passIndex) => {
                     allMovementEventsUnavailable: true,
                     // Add tracking for green change types per signal group
                     greenChangeTypes: {
-                        lostGreen: 0,
-                        gotGreen: 0
+                        earlierGreenStart: 0,
+                        extendedGreenEnd: 0,
+                        laterGreenStart: 0,
+                        shortenedGreenEnd: 0
                     }
                 };
             }
@@ -259,7 +265,7 @@ export const processPassThrough = (events, passIndex) => {
 
             if (eventIndex > 0 && previousIntervalData) { // Can only compare if not the first event and previous data exists
                 const timeDiffSeconds = (currentTimestamp.getTime() - previousIntervalData.timestamp.getTime()) / 1000;
-                const bufferSeconds = 3.0; // CHANGED from 2.0 to 3.0
+                const bufferSeconds = 3.0; // Buffer to account for normal timing fluctuations
                 // Threshold allows for time passage + buffer
                 const threshold = Math.max(0, timeDiffSeconds) + bufferSeconds; // Ensure threshold is non-negative
 
@@ -268,35 +274,42 @@ export const processPassThrough = (events, passIndex) => {
 
                 let startChanged = false;
                 let endChanged = false;
-                let changeType = null; // Track the type of change
+                let changeType = null; // Track the specific type of change
 
                 // Check start time change
                 if (currentGreenStart === null && prevStart !== null) {
-                    startChanged = true; // Disappeared
-                    changeType = "lostGreen"; // Lost green phase
+                    startChanged = true; // Green start disappeared
+                    changeType = "shortenedGreenEnd"; // Consider this as shortening (more conservative)
                 } else if (currentGreenStart !== null && prevStart === null) {
-                    startChanged = true; // Appeared
-                    changeType = "gotGreen"; // Got new green phase
+                    startChanged = true; // Green start appeared
+                    changeType = "earlierGreenStart"; // Consider this as earlier start
                 } else if (currentGreenStart !== null && prevStart !== null) {
                     if (Math.abs(currentGreenStart - prevStart) > threshold) {
                         startChanged = true;
-                        // If new start is earlier, we "got green" (more green), otherwise "lost green"
-                        changeType = currentGreenStart < prevStart ? "gotGreen" : "lostGreen";
+                        // If new start is earlier (smaller), it's a positive change
+                        changeType = currentGreenStart < prevStart ? "earlierGreenStart" : "laterGreenStart";
                     }
                 }
 
-                // Check end time change (only set change type if not already set by start change)
+                // Check end time change - may override or complement the start change type
                 if (currentGreenEnd === null && prevEnd !== null) {
-                    endChanged = true; // Disappeared
-                    if (!changeType) changeType = "lostGreen"; // Lost green phase
+                    endChanged = true; // Green end disappeared
+                    // Only override if no start change was detected
+                    if (!changeType) changeType = "shortenedGreenEnd";
                 } else if (currentGreenEnd !== null && prevEnd === null) {
-                    endChanged = true; // Appeared
-                    if (!changeType) changeType = "gotGreen"; // Got new green phase
+                    endChanged = true; // Green end appeared
+                    // Only override if no start change was detected
+                    if (!changeType) changeType = "extendedGreenEnd";
                 } else if (currentGreenEnd !== null && prevEnd !== null) {
                     if (Math.abs(currentGreenEnd - prevEnd) > threshold) {
                         endChanged = true;
-                        // If new end is later, we "got green" (more green), otherwise "lost green"
-                        if (!changeType) changeType = currentGreenEnd > prevEnd ? "gotGreen" : "lostGreen";
+                        // If no start change was detected, set the change type based on end time
+                        if (!changeType) {
+                            // If new end is later (bigger), it's a positive change
+                            changeType = currentGreenEnd > prevEnd ? "extendedGreenEnd" : "shortenedGreenEnd";
+                        }
+                        // If there was already a start change, we now have both start and end changing
+                        // We don't override the existing type, as the start change takes precedence in our model
                     }
                 }
 
@@ -320,7 +333,7 @@ export const processPassThrough = (events, passIndex) => {
                         metric.greenChangeType = changeType;
                         significantGreenIntervalChangeOccurred = true;
 
-                        // Update counts as before
+                        // Update counts with the new categorization
                         if (changeType && signalGroupsData[sgName].greenChangeTypes) {
                             signalGroupsData[sgName].greenChangeTypes[changeType]++;
                         }
@@ -330,6 +343,7 @@ export const processPassThrough = (events, passIndex) => {
                         }
                     }
                 }
+
             }
 
             // Store current interval data for the next comparison for this SG
@@ -370,7 +384,12 @@ export const processPassThrough = (events, passIndex) => {
             }],
             hasMovementEvents: false,
             allMovementEventsUnavailable: true,
-            greenChangeTypes: { lostGreen: 0, gotGreen: 0 }
+            greenChangeTypes: {
+                earlierGreenStart: 0,
+                extendedGreenEnd: 0,
+                laterGreenStart: 0,
+                shortenedGreenEnd: 0
+            }
         };
     }
 
@@ -478,7 +497,7 @@ export const calculateIntersectionSummary = (intersection) => {
     if (!intersection || !intersection.passThroughs || intersection.passThroughs.length === 0) {
         return {
             totalPassThroughs: 0,
-            timeRange: { start: null, end: null },
+            timeRange: {start: null, end: null},
             distancePatterns: [],
             speedPatterns: [],
             stopLocations: [],
@@ -492,8 +511,10 @@ export const calculateIntersectionSummary = (intersection) => {
             // Add green change types
             greenIntervalChanges: 0,
             greenChangeTypes: {
-                lostGreen: 0,
-                gotGreen: 0
+                earlierGreenStart: 0,
+                extendedGreenEnd: 0,
+                laterGreenStart: 0,
+                shortenedGreenEnd: 0
             }
         };
     }
@@ -512,8 +533,10 @@ export const calculateIntersectionSummary = (intersection) => {
         greenIntervalChanges: 0,
         // Add change types tracking
         greenChangeTypes: {
-            lostGreen: 0,
-            gotGreen: 0
+            earlierGreenStart: 0,
+            extendedGreenEnd: 0,
+            laterGreenStart: 0,
+            shortenedGreenEnd: 0
         },
         // Add prediction statistics
         predictionStatistics: {
@@ -537,8 +560,10 @@ export const calculateIntersectionSummary = (intersection) => {
 
             // Count by change type if available
             if (passThrough.summary?.greenChangeTypes) {
-                summary.greenChangeTypes.lostGreen += passThrough.summary.greenChangeTypes.lostGreen || 0;
-                summary.greenChangeTypes.gotGreen += passThrough.summary.greenChangeTypes.gotGreen || 0;
+                summary.greenChangeTypes.earlierGreenStart += passThrough.summary.greenChangeTypes.earlierGreenStart || 0;
+                summary.greenChangeTypes.extendedGreenEnd += passThrough.summary.greenChangeTypes.extendedGreenEnd || 0;
+                summary.greenChangeTypes.laterGreenStart += passThrough.summary.greenChangeTypes.laterGreenStart || 0;
+                summary.greenChangeTypes.shortenedGreenEnd += passThrough.summary.greenChangeTypes.shortenedGreenEnd || 0;
             }
         }
 
@@ -574,9 +599,9 @@ export const calculateIntersectionSummary = (intersection) => {
                 summary.signalGroupAnalysis[sgName] = {
                     totalOccurrences: 0,
                     glosaAdviceStats: {},
-                    movementEventAvailability: { available: 0, unavailable: 0, none: 0 },
-                    distanceRange: { min: Infinity, max: -Infinity },
-                    speedRange: { min: Infinity, max: -Infinity },
+                    movementEventAvailability: {available: 0, unavailable: 0, none: 0},
+                    distanceRange: {min: Infinity, max: -Infinity},
+                    speedRange: {min: Infinity, max: -Infinity},
                     greenIntervalChanges: 0,
                     // Add change types for signal group
                     greenChangeTypes: {
@@ -602,7 +627,7 @@ export const calculateIntersectionSummary = (intersection) => {
 
             // Analyze metrics
             sgData.metrics.forEach(metric => {
-                allMetrics.push({ ...metric, signalGroup: sgName });
+                allMetrics.push({...metric, signalGroup: sgName});
 
                 // Update distance range
                 sgAnalysis.distanceRange.min = Math.min(sgAnalysis.distanceRange.min, metric.distance);
