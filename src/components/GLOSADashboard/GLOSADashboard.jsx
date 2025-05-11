@@ -31,6 +31,8 @@ const GLOSADashboard = () => {
     // Saved passes state
     const [savedPasses, setSavedPasses] = useState([]);
     const [showSavedPasses, setShowSavedPasses] = useState(true);
+    const [loadingSavedPasses, setLoadingSavedPasses] = useState(false);
+    const [savedPassesError, setSavedPassesError] = useState(null);
 
     // Load saved passes from file on mount
     useEffect(() => {
