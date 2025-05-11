@@ -11,16 +11,29 @@ import {
 const ACCELERATION_FACTOR_TRAM = 1.3; // m/s²
 const MIN_ALLOWED_SPEED_TRAM = 8 / 3.6; // m/s (8 km/h)
 const MAX_ALLOWED_SPEED = 50 / 3.6; // m/s (50 km/h)
-const INTERVAL_SIZE = 5; // meters
-
 
 const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
     // State for visualization toggle
     const [visualizationType, setVisualizationType] = useState('success-rate');
 
+    // Configurable parameters with defaults
+    const [intervalSize, setIntervalSize] = useState(10); // Default 10m intervals
+    const [tolerance, setTolerance] = useState(2); // Default ±2s tolerance
+    const [xAxisInterval, setXAxisInterval] = useState(1); // Show every nth label
+
+    // Calculate a good default for xAxisInterval based on data range
+    const calculateDefaultXAxisInterval = (maxDistance) => {
+        const totalIntervals = Math.ceil(maxDistance / intervalSize);
+        // Use a heuristic: if more than 20 intervals, show every nth label where n = ceil(totalIntervals/15)
+        if (totalIntervals > 20) {
+            return Math.ceil(totalIntervals / 15);
+        }
+        return 1; // Show all labels if few intervals
+    };
+
     // Distance intervals to analyze (in meters)
     const distanceIntervals = useMemo(() => {
-        // Create intervals from 0 to max distance found in data, in steps of INTERVAL_SIZE
+        // Create intervals from 0 to max distance found in data, in steps of intervalSize
         let maxDistance = 0;
 
         // Find maximum distance in the data
@@ -37,20 +50,24 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         });
 
         // Round up to nearest interval
-        const maxIntervalEnd = Math.ceil(maxDistance / INTERVAL_SIZE) * INTERVAL_SIZE;
+        const maxIntervalEnd = Math.ceil(maxDistance / intervalSize) * intervalSize;
+
+        // Set a good default for X-axis interval based on the data range
+        const defaultInterval = calculateDefaultXAxisInterval(maxDistance);
+        setXAxisInterval(defaultInterval);
 
         // Create array of intervals
         const intervals = [];
-        for (let i = 0; i < maxIntervalEnd; i += INTERVAL_SIZE) {
+        for (let i = 0; i < maxIntervalEnd; i += intervalSize) {
             intervals.push({
                 min: i,
-                max: i + INTERVAL_SIZE,
-                label: `${i}-${i + INTERVAL_SIZE}m`
+                max: i + intervalSize,
+                label: `${i}-${i + intervalSize}m`
             });
         }
 
         return intervals;
-    }, [intersections]);
+    }, [intersections, intervalSize]);
 
     // Analyze GLOSA advice reliability in each interval
     const analysisResults = useMemo(() => {
@@ -105,11 +122,11 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                         // Calculate arrival time
                         const arrivalTime = new Date(timestamp.getTime() + (travelDuration * 1000));
 
-                        // Check if arrival would be during a green phase (+/- 2 seconds tolerance)
+                        // Check if arrival would be during a green phase using the configurable tolerance
                         const wouldArriveOnGreen = checkGreenPhaseAtArrival(
                             sg,
                             arrivalTime,
-                            2 // 2 seconds tolerance
+                            tolerance // Using the configurable tolerance value
                         );
 
                         if (wouldArriveOnGreen) {
@@ -141,7 +158,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         });
 
         return results;
-    }, [intersections, distanceIntervals]);
+    }, [intersections, distanceIntervals, tolerance]);
 
     // Simulate travel time based on acceleration/deceleration model from the recalculation script
     function simulateTravel(distance, currentSpeed, targetSpeed) {
@@ -193,90 +210,24 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
 
     // Check if there would be a green phase at the arrival time
     function checkGreenPhaseAtArrival(signalGroup, arrivalTime, toleranceSeconds) {
-        // Find metrics with timestamps close to the arrival time
+        // Define arrival window (accounting for tolerance)
+        const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
+        const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
+
+
+        // Filter metrics to find those within the arrival window
         const relevantMetrics = signalGroup.metrics.filter(metric => {
-            const timeDiff = Math.abs(metric.timestamp - arrivalTime) / 1000; // in seconds
-            return timeDiff <= 30; // Look at metrics within 30 seconds of arrival time
+            return metric.timestamp >= arrivalEarly && metric.timestamp <= arrivalLate;
         });
 
-        if (relevantMetrics.length === 0) return false;
-
-        // Sort by timestamp to find closest metrics before and after arrival
-        relevantMetrics.sort((a, b) => a.timestamp - b.timestamp);
-
-        // Check each metric for green phase information
+        // go over all metrics and check if any of them is green
         for (const metric of relevantMetrics) {
-            // First try checking movement events
-            if (metric.movementEvents && metric.movementEvents.length > 0) {
-                for (const movementEvent of metric.movementEvents) {
-                    // Skip if not a green phase state
-                    if (!["permissiveMovementAllowed", "protectedMovementAllowed"].includes(movementEvent.state)) {
-                        continue;
-                    }
-
-                    // Check if arrivalTime is within this green phase (+/- tolerance)
-                    if (movementEvent.startTime && movementEvent.minEndTime) {
-                        const startTime = new Date(movementEvent.startTime);
-                        const endTime = new Date(movementEvent.minEndTime);
-
-                        // If startTime is default value (epoch), consider it as "already started"
-                        const isDefaultStart = startTime.getTime() === 0 ||
-                            startTime.toISOString() === "1970-01-01T00:00:00.000Z" ||
-                            startTime.toISOString() === "1970-01-01T00:00:00Z";
-
-                        // Add tolerance to check range
-                        const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
-                        const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
-
-                        // Check if arrival window overlaps with green phase
-                        if (isDefaultStart) {
-                            // For default start time, check if arrival is before end time
-                            if (arrivalEarly <= endTime) {
-                                return true;
-                            }
-                        } else if ((arrivalEarly <= endTime && arrivalLate >= startTime) ||
-                            (startTime <= arrivalLate && endTime >= arrivalEarly)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            // Alternative check using greenStartTime and greenEndTime if available
-            // This is often more directly usable than movement events
-            if (metric.greenStartTime !== undefined && metric.greenEndTime !== undefined) {
-                if (metric.greenStartTime === 0 && metric.greenEndTime > 0) {
-                    // Currently in green phase at this metric's timestamp
-                    const metricTime = metric.timestamp;
-                    const greenEndTime = new Date(metricTime.getTime() + (metric.greenEndTime * 1000));
-
-                    // Add tolerance to check range
-                    const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
-
-                    // Check if arrival is before green ends
-                    if (arrivalEarly <= greenEndTime) {
-                        return true;
-                    }
-                } else if (metric.greenStartTime > 0) {
-                    // Green phase will start in the future
-                    const metricTime = metric.timestamp;
-                    const greenStartTime = new Date(metricTime.getTime() + (metric.greenStartTime * 1000));
-                    const greenEndTime = metric.greenEndTime ?
-                        new Date(metricTime.getTime() + (metric.greenEndTime * 1000)) : null;
-
-                    // Add tolerance to check range
-                    const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
-                    const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
-
-                    // Check if arrival overlaps with green phase
-                    if (greenEndTime && arrivalEarly <= greenEndTime && arrivalLate >= greenStartTime) {
-                        return true;
-                    }
-                }
+            // current green phase (greenStartTime = 0)
+            if (metric.greenStartTime === 0 && metric.greenEndTime > 0) {
+                return true;
             }
         }
-
-        return false;
+        return false; // No green phase found for arrival time
     }
 
     // Prepare data for visualization
@@ -419,11 +370,116 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         };
     }, [analysisResults]);
 
+    // Handle interval size change
+    const handleIntervalSizeChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value > 0) {
+            setIntervalSize(value);
+        }
+    };
+
+    // Handle tolerance change
+    const handleToleranceChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value >= 0) {
+            setTolerance(value);
+        }
+    };
+
+    // Handle X-axis interval change
+    const handleXAxisIntervalChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value > 0) {
+            setXAxisInterval(value);
+        }
+    };
+
     return (
         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
                 GLOSA Advice Reliability Analysis
             </h3>
+
+            {/* Configuration Controls */}
+            <div style={{
+                backgroundColor: 'white',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '16px',
+                alignItems: 'center'
+            }}>
+                <div>
+                    <label htmlFor="interval-size" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                        Distance Interval (m):
+                    </label>
+                    <input
+                        id="interval-size"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={intervalSize}
+                        onChange={handleIntervalSizeChange}
+                        style={{
+                            width: '70px',
+                            padding: '6px 8px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '4px',
+                            fontSize: '14px'
+                        }}
+                    />
+                </div>
+
+                <div>
+                    <label htmlFor="tolerance" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                        Green Phase Tolerance (±s):
+                    </label>
+                    <input
+                        id="tolerance"
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={tolerance}
+                        onChange={handleToleranceChange}
+                        style={{
+                            width: '70px',
+                            padding: '6px 8px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '4px',
+                            fontSize: '14px'
+                        }}
+                    />
+                </div>
+
+                <div>
+                    <label htmlFor="x-axis-interval" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                        X-Axis Label Interval:
+                    </label>
+                    <input
+                        id="x-axis-interval"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={xAxisInterval}
+                        onChange={handleXAxisIntervalChange}
+                        style={{
+                            width: '70px',
+                            padding: '6px 8px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '4px',
+                            fontSize: '14px'
+                        }}
+                    />
+                </div>
+
+                <div style={{ marginLeft: 'auto' }}>
+                    <p style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic' }}>
+                        Changes will recalculate analysis with new parameters
+                    </p>
+                </div>
+            </div>
 
             {/* Summary Stats Section */}
             <div style={{
@@ -486,10 +542,10 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                         Analysis Parameters
                     </h4>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                        Distance Intervals: {INTERVAL_SIZE}m
+                        Distance Intervals: {intervalSize}m
                     </p>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                        Green Phase Tolerance: ±2 seconds
+                        Green Phase Tolerance: ±{tolerance} seconds
                     </p>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
                         Acceleration Rate: {ACCELERATION_FACTOR_TRAM} m/s²
@@ -549,7 +605,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                                 angle={-45}
                                 textAnchor="end"
                                 height={70}
-                                interval={0}
+                                interval={xAxisInterval - 1} // Convert to 0-based index
                                 label={{ value: 'Distance from Intersection (m)', position: 'insideBottom', offset: -5 }}
                             />
                             <YAxis
@@ -592,7 +648,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                                 angle={-45}
                                 textAnchor="end"
                                 height={70}
-                                interval={0}
+                                interval={xAxisInterval - 1} // Convert to 0-based index
                                 label={{ value: 'Distance from Intersection (m)', position: 'insideBottom', offset: -5 }}
                             />
                             <YAxis
@@ -645,7 +701,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                 </p>
                 <ol style={{ paddingLeft: '20px', fontSize: '14px', color: '#374151' }}>
                     <li style={{ marginBottom: '8px' }}>
-                        Dividing the approach into {INTERVAL_SIZE}m distance intervals
+                        Dividing the approach into {intervalSize}m distance intervals
                     </li>
                     <li style={{ marginBottom: '8px' }}>
                         Finding the first useful advice (accelerate/cruise/decelerate) in each interval
@@ -657,7 +713,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                         Calculating the expected arrival time at the intersection
                     </li>
                     <li style={{ marginBottom: '8px' }}>
-                        Checking if that arrival time coincides with an actual green phase (±2 seconds tolerance)
+                        Checking if that arrival time coincides with an actual green phase (±{tolerance} seconds tolerance)
                     </li>
                     <li>
                         Calculating success rate: percentage of advice that would successfully get the vehicle through a green light
