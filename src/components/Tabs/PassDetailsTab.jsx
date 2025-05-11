@@ -1,8 +1,9 @@
 // src/components/Tabs/PassDetailsTab.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SignalGroupOverview from "../SignalGroup/SignalGroupOverview.jsx";
 import SignalGroupGLOSAAnalysis from "../SignalGroup/SignalGroupGLOSAAnalysis.jsx";
 import VehiclePathMap from "../Map/VehiclePathMap.jsx";
+import SavePassButton from "../SavedPasses/SavePassButton.jsx";
 
 // Icon for stability status
 const StabilityIcon = ({ stable, size = 16 }) => {
@@ -70,9 +71,12 @@ const CollapsibleHeader = ({ title, isExpanded, onToggle, ingress }) => (
     </div>
 );
 
-const PassDetailsTab = ({ passThrough }) => {
+const PassDetailsTab = ({ passThrough, savedPasses = [], onSavePass, onUnsavePass }) => {
     // State to track which signal groups are expanded
     const [expandedGroups, setExpandedGroups] = useState({});
+
+    // Check if this pass is saved
+    const isSaved = savedPasses.some(saved => saved.passIndex === passThrough?.passIndex);
 
     if (!passThrough) {
         return (
@@ -125,7 +129,18 @@ const PassDetailsTab = ({ passThrough }) => {
         <div>
             {/* Pass-Through Summary */}
             <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px', marginBottom: '24px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Pass-Through Summary</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '600', margin: '0' }}>Pass-Through Summary</h2>
+
+                    {/* Save Pass Button */}
+                    <SavePassButton
+                        passThrough={passThrough}
+                        isSaved={isSaved}
+                        onSavePass={onSavePass}
+                        onUnsavePass={onUnsavePass}
+                    />
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', alignItems: 'center' }}>
                     <span style={{ fontWeight: '500' }}>UUID:</span> <span>{uuid}</span>
                     <span style={{ fontWeight: '500' }}>Timestamp:</span> <span>{timestamp}</span>

@@ -1,6 +1,7 @@
 // src/components/IntersectionList/IntersectionList.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import IntersectionItem from './IntersectionItem';
+import SearchField from './SearchField';
 
 // Sort button component for reusability
 const SortButton = ({ label, currentField, currentDirection, field, onClick }) => {
@@ -62,6 +63,11 @@ const IntersectionList = ({
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
 
+    // State for UUID search
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchResultFound, setSearchResultFound] = useState(false);
+    const [searchMessage, setSearchMessage] = useState('');
+
     // Handle sort button click
     const handleSort = (field) => {
         if (sortField === field) {
@@ -108,6 +114,54 @@ const IntersectionList = ({
         }
     };
 
+    // Function to search for a UUID
+    const handleSearch = (term) => {
+        setSearchTerm(term);
+
+        if (!term) {
+            setSearchResultFound(false);
+            setSearchMessage('');
+            return;
+        }
+
+        // Search for the UUID in all pass-throughs
+        let found = false;
+        let foundPassId = null;
+
+        // Search in all intersections
+        for (const intersectionId in intersections) {
+            const intersection = intersections[intersectionId];
+
+            for (const pass of intersection.passThroughs) {
+                // Check if the UUID includes the search term (case insensitive)
+                if (pass.uuid && pass.uuid.toLowerCase().includes(term.toLowerCase())) {
+                    found = true;
+                    foundPassId = pass.passIndex;
+                    break;
+                }
+            }
+
+            if (found) break;
+        }
+
+        if (found && foundPassId !== null) {
+            setSearchResultFound(true);
+            setSearchMessage('Pass found!');
+            // Select the found pass-through
+            onSelectPassThrough(foundPassId);
+        } else {
+            setSearchResultFound(false);
+            setSearchMessage('No matching passes found.');
+        }
+    };
+
+    // Clear search status when selection changes through other means
+    useEffect(() => {
+        if (searchTerm && selectedPassIndex) {
+            setSearchMessage('');
+        }
+    }, [selectedPassIndex]);
+
     if (Object.keys(intersections).length === 0) {
         return (
             <div style={{ padding: '16px', textAlign: 'center', color: '#6b7280' }}>
@@ -145,6 +199,34 @@ const IntersectionList = ({
                     />
                 </div>
             </div>
+
+            {/* Search field */}
+            <SearchField onSearch={handleSearch} />
+
+            {/* Search result message */}
+            {searchMessage && (
+                <div style={{
+                    padding: '8px 16px',
+                    backgroundColor: searchResultFound ? '#f0fdf4' : '#fef2f2',
+                    color: searchResultFound ? '#166534' : '#991b1b',
+                    borderBottom: '1px solid #e5e7eb',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                }}>
+                    {searchResultFound ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                        </svg>
+                    ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                        </svg>
+                    )}
+                    {searchMessage}
+                </div>
+            )}
 
             <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', flexGrow: 1 }}>
                 {/* Filtered Intersections Group */}

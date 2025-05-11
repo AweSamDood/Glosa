@@ -10,7 +10,9 @@ import PassDetailsTab from '../Tabs/PassDetailsTab';
 import DataTableTab from '../Tabs/DataTableTab';
 import IntersectionTab from '../Tabs/IntersectionTab';
 import GeneralOverviewTab from '../Tabs/GeneralOverviewTab';
+import SavedPassesPanel from '../SavedPasses/SavedPassesPanel';
 import GlobalFilteringSection from '../Filtering/GlobalFilteringSection';
+import SavedPassesService from '../../services/SavedPassesService';
 
 const GLOSADashboard = () => {
     const { intersections, loading, error } = useGlosaData();
@@ -24,6 +26,20 @@ const GLOSADashboard = () => {
     const [showFilteredOutItems, setShowFilteredOutItems] = useState(false);
     const [filtersActive, setFiltersActive] = useState(false);
     const [showFilters, setShowFilters] = useState(true);
+
+    // Saved passes state
+    const [savedPasses, setSavedPasses] = useState([]);
+    const [showSavedPasses, setShowSavedPasses] = useState(true);
+
+    // Load saved passes from localStorage on mount
+    useEffect(() => {
+        const loadSavedPasses = () => {
+            const saved = SavedPassesService.getSavedPasses();
+            setSavedPasses(saved);
+        };
+
+        loadSavedPasses();
+    }, []);
 
     // Initialize filtered data when intersections load
     useEffect(() => {
@@ -58,6 +74,50 @@ const GLOSADashboard = () => {
         setShowFilters(!showFilters);
     };
 
+    // Toggle saved passes panel visibility
+    const toggleSavedPasses = () => {
+        setShowSavedPasses(!showSavedPasses);
+    };
+
+    // Save a pass
+    const handleSavePass = (passData) => {
+        const savedPass = SavedPassesService.savePass(passData);
+        if (savedPass) {
+            setSavedPasses(prev => [...prev, savedPass]);
+        }
+    };
+
+    // Unsave a pass
+    const handleUnsavePass = (passId) => {
+        // If passId is a number, it's a passIndex; if it's a string, it's a saved pass ID
+        const isPassIndex = typeof passId === 'number';
+
+        if (isPassIndex) {
+            // Find the saved pass with this passIndex
+            const savedPass = savedPasses.find(p => p.passIndex === passId);
+            if (savedPass) {
+                passId = savedPass.id;
+            } else {
+                return; // Pass not found
+            }
+        }
+
+        const removed = SavedPassesService.removeSavedPass(passId);
+        if (removed) {
+            setSavedPasses(prev => prev.filter(p => p.id !== passId));
+        }
+    };
+
+    // Update a pass note
+    const handleUpdateNote = (passId, note) => {
+        const updated = SavedPassesService.updatePassNote(passId, note);
+        if (updated) {
+            setSavedPasses(prev =>
+                prev.map(p => p.id === passId ? { ...p, note } : p)
+            );
+        }
+    };
+
     // Memoize finding the selected pass-through object
     const selectedPass = useMemo(() => {
         if (selectedPassIndex === null || !intersections) {
@@ -68,7 +128,14 @@ const GLOSADashboard = () => {
             const found = intersections[intersectionId]?.passThroughs?.find(
                 pass => pass.passIndex === selectedPassIndex
             );
-            if (found) return found;
+            if (found) {
+                // Add intersection information to the pass
+                return {
+                    ...found,
+                    intersectionName: intersections[intersectionId].name,
+                    intersectionId: intersectionId
+                };
+            }
         }
         return null; // Return null if not found
     }, [selectedPassIndex, intersections]);
@@ -198,6 +265,39 @@ const GLOSADashboard = () => {
                             )}
                         </button>
 
+                        {/* Saved Passes Toggle Button */}
+                        <button
+                            onClick={toggleSavedPasses}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                backgroundColor: savedPasses.length > 0 ? '#eff6ff' : '#f9fafb',
+                                color: savedPasses.length > 0 ? '#1d4ed8' : '#4b5563',
+                                borderRadius: '6px',
+                                border: 'none',
+                                fontWeight: '500',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '20px', height: '20px' }}>
+                                <path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.582-1.9C4.045 12.733 2 10.352 2 7.5a4.5 4.5 0 018-2.828A4.5 4.5 0 0118 7.5c0 2.852-2.044 5.233-3.885 6.82a22.049 22.049 0 01-3.744 2.582l-.019.01-.005.003h-.002a.739.739 0 01-.69.001l-.002-.001z" />
+                            </svg>
+                            Saved Passes
+                            {savedPasses.length > 0 && (
+                                <span style={{
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    borderRadius: '9999px',
+                                    padding: '1px 8px',
+                                    fontSize: '12px'
+                                }}>
+                                    {savedPasses.length}
+                                </span>
+                            )}
+                        </button>
+
                         {/* Show dataset name if available */}
                         {import.meta.env.VITE_INSTANCE_NAME && (
                             <div style={{
@@ -250,39 +350,55 @@ const GLOSADashboard = () => {
                     </div>
 
                     {/* Scrollable Content Area: Takes remaining vertical space, scrolls vertically */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-                        {!hasIntersections ? (
-                            <NoDataDisplay /> // Show no data if intersections object is empty/null
-                        ) : !hasPassThroughs ? (
-                            // Show message if intersections exist but have no pass-throughs
-                            <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-                                <p style={{ fontSize: '16px', color: '#6b7280' }}>No pass-throughs recorded for the available intersections.</p>
-                            </div>
-                        ) : (
-                            // Render tabs and content
-                            <>
-                                {/* Render active tab content */}
-                                {activeTab === 'general' && <GeneralOverviewTab
-                                    intersections={intersections}
-                                    filteredData={filteredData}
-                                />}
-                                {activeTab === 'intersection' && <IntersectionTab
-                                    intersection={selectedIntersection}
-                                />}
-                                {activeTab === 'pass-details' && <PassDetailsTab
-                                    passThrough={selectedPass}
-                                />}
-                                {activeTab === 'data' && selectedPass && <DataTableTab
-                                    passThrough={selectedPass}
-                                />}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex' }}>
+                        <div style={{ flex: 1 }}>
+                            {!hasIntersections ? (
+                                <NoDataDisplay /> // Show no data if intersections object is empty/null
+                            ) : !hasPassThroughs ? (
+                                // Show message if intersections exist but have no pass-throughs
+                                <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                                    <p style={{ fontSize: '16px', color: '#6b7280' }}>No pass-throughs recorded for the available intersections.</p>
+                                </div>
+                            ) : (
+                                // Render tabs and content
+                                <>
+                                    {/* Render active tab content */}
+                                    {activeTab === 'general' && <GeneralOverviewTab
+                                        intersections={intersections}
+                                        filteredData={filteredData}
+                                    />}
+                                    {activeTab === 'intersection' && <IntersectionTab
+                                        intersection={selectedIntersection}
+                                    />}
+                                    {activeTab === 'pass-details' && <PassDetailsTab
+                                        passThrough={selectedPass}
+                                        savedPasses={savedPasses}
+                                        onSavePass={handleSavePass}
+                                        onUnsavePass={handleUnsavePass}
+                                    />}
+                                    {activeTab === 'data' && selectedPass && <DataTableTab
+                                        passThrough={selectedPass}
+                                    />}
 
-                                {/* Show message if pass-through is needed but not selected */}
-                                {(activeTab !== 'intersection' && activeTab !== 'general' && !selectedPass) && (
-                                    <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-                                        <p style={{ fontSize: '16px', color: '#6b7280' }}>Select a pass-through from the list to view details.</p>
-                                    </div>
-                                )}
-                            </>
+                                    {/* Show message if pass-through is needed but not selected */}
+                                    {(activeTab !== 'intersection' && activeTab !== 'general' && !selectedPass) && (
+                                        <div style={{ textAlign: 'center', padding: '48px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                                            <p style={{ fontSize: '16px', color: '#6b7280' }}>Select a pass-through from the list to view details.</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Saved Passes Panel - shown conditionally */}
+                        {showSavedPasses && (
+                            <SavedPassesPanel
+                                savedPasses={savedPasses}
+                                onSelectPass={handleSelectPassThrough}
+                                onUpdateNote={handleUpdateNote}
+                                onRemovePass={handleUnsavePass}
+                                selectedPassIndex={selectedPassIndex}
+                            />
                         )}
                     </div> {/* End Scrollable Content Area */}
                 </div> {/* End Main Content Area */}
