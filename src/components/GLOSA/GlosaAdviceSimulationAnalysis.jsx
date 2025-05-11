@@ -17,13 +17,22 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
     const [visualizationType, setVisualizationType] = useState('success-rate');
 
     // Configurable parameters with defaults
-    const [intervalSize, setIntervalSize] = useState(10); // Default 10m intervals
+    const [intervalSize, setIntervalSize] = useState(20); // Default 20m intervals
     const [tolerance, setTolerance] = useState(2); // Default ±2s tolerance
     const [xAxisInterval, setXAxisInterval] = useState(1); // Show every nth label
 
+    // New states for min and max distance
+    const [minDistance, setMinDistance] = useState(20); // Default 20m min
+    const [maxDistance, setMaxDistance] = useState(300); // Default 300m max
+
+    // State for toggling advice types in "By Advice Type" visualization
+    const [showAccelerate, setShowAccelerate] = useState(true);
+    const [showCruise, setShowCruise] = useState(true);
+    const [showDecelerate, setShowDecelerate] = useState(true);
+
     // Calculate a good default for xAxisInterval based on data range
-    const calculateDefaultXAxisInterval = (maxDistance) => {
-        const totalIntervals = Math.ceil(maxDistance / intervalSize);
+    const calculateDefaultXAxisInterval = (maxDist) => {
+        const totalIntervals = Math.ceil((maxDist - minDistance) / intervalSize);
         // Use a heuristic: if more than 20 intervals, show every nth label where n = ceil(totalIntervals/15)
         if (totalIntervals > 20) {
             return Math.ceil(totalIntervals / 15);
@@ -31,34 +40,39 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         return 1; // Show all labels if few intervals
     };
 
-    // Distance intervals to analyze (in meters)
-    const distanceIntervals = useMemo(() => {
-        // Create intervals from 0 to max distance found in data, in steps of intervalSize
-        let maxDistance = 0;
-
+    // Find absolute maximum distance in the data
+    const absoluteMaxDistance = useMemo(() => {
+        let maxDist = 0;
         // Find maximum distance in the data
         Object.values(intersections).forEach(intersection => {
             (intersection.passThroughs || []).forEach(pass => {
                 Object.values(pass.signalGroups || {}).forEach(sg => {
                     (sg.metrics || []).forEach(metric => {
-                        if (metric.distance > maxDistance) {
-                            maxDistance = metric.distance;
+                        if (metric.distance > maxDist) {
+                            maxDist = metric.distance;
                         }
                     });
                 });
             });
         });
+        return maxDist;
+    }, [intersections]);
+
+    // Distance intervals to analyze (in meters)
+    const distanceIntervals = useMemo(() => {
+        // Use user-defined max distance, but cap it at absolute maximum from data
+        const effectiveMaxDistance = Math.min(maxDistance, absoluteMaxDistance);
 
         // Round up to nearest interval
-        const maxIntervalEnd = Math.ceil(maxDistance / intervalSize) * intervalSize;
+        const maxIntervalEnd = Math.ceil(effectiveMaxDistance / intervalSize) * intervalSize;
 
         // Set a good default for X-axis interval based on the data range
-        const defaultInterval = calculateDefaultXAxisInterval(maxDistance);
+        const defaultInterval = calculateDefaultXAxisInterval(effectiveMaxDistance);
         setXAxisInterval(defaultInterval);
 
-        // Create array of intervals
+        // Create array of intervals starting from minDistance
         const intervals = [];
-        for (let i = 0; i < maxIntervalEnd; i += intervalSize) {
+        for (let i = minDistance; i < maxIntervalEnd; i += intervalSize) {
             intervals.push({
                 min: i,
                 max: i + intervalSize,
@@ -67,7 +81,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         }
 
         return intervals;
-    }, [intersections, intervalSize]);
+    }, [intersections, intervalSize, minDistance, maxDistance, absoluteMaxDistance]);
 
     // Analyze GLOSA advice reliability in each interval
     const analysisResults = useMemo(() => {
@@ -214,7 +228,6 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
         const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
 
-
         // Filter metrics to find those within the arrival window
         const relevantMetrics = signalGroup.metrics.filter(metric => {
             return metric.timestamp >= arrivalEarly && metric.timestamp <= arrivalLate;
@@ -318,15 +331,21 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                         <p style={{ margin: '0 0 3px 0', fontSize: '12px' }}>
                             Sample Counts:
                         </p>
-                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#22c55e' }}>
-                            Accelerate: {payload[0].payload['Accelerate Count']}
-                        </p>
-                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#3b82f6' }}>
-                            Cruise: {payload[0].payload['Cruise Count']}
-                        </p>
-                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#ef4444' }}>
-                            Decelerate: {payload[0].payload['Decelerate Count']}
-                        </p>
+                        {showAccelerate && (
+                            <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#22c55e' }}>
+                                Accelerate: {payload[0].payload['Accelerate Count']}
+                            </p>
+                        )}
+                        {showCruise && (
+                            <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#3b82f6' }}>
+                                Cruise: {payload[0].payload['Cruise Count']}
+                            </p>
+                        )}
+                        {showDecelerate && (
+                            <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#ef4444' }}>
+                                Decelerate: {payload[0].payload['Decelerate Count']}
+                            </p>
+                        )}
                     </div>
                 </div>
             );
@@ -394,6 +413,37 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
         }
     };
 
+    // Handle min distance change
+    const handleMinDistanceChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value >= 0 && value < maxDistance) {
+            setMinDistance(value);
+        }
+    };
+
+    // Handle max distance change
+    const handleMaxDistanceChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value > minDistance) {
+            setMaxDistance(value);
+        }
+    };
+
+    // Toggle button style generator
+    const getToggleButtonStyle = (isActive) => ({
+        padding: '4px 8px',
+        backgroundColor: isActive ? '#f0f9ff' : '#f3f4f6',
+        color: isActive ? '#3b82f6' : '#6b7280',
+        border: `1px solid ${isActive ? '#93c5fd' : '#d1d5db'}`,
+        borderRadius: '4px',
+        fontSize: '12px',
+        fontWeight: isActive ? '600' : '400',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px'
+    });
+
     return (
         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
@@ -405,80 +455,136 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                 backgroundColor: 'white',
                 padding: '16px',
                 borderRadius: '8px',
-                marginBottom: '16px',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '16px',
-                alignItems: 'center'
+                marginBottom: '16px'
             }}>
-                <div>
-                    <label htmlFor="interval-size" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
-                        Distance Interval (m):
-                    </label>
-                    <input
-                        id="interval-size"
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={intervalSize}
-                        onChange={handleIntervalSizeChange}
-                        style={{
-                            width: '70px',
-                            padding: '6px 8px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontSize: '14px'
-                        }}
-                    />
+                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>Analysis Parameters</h4>
+
+                <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '16px',
+                    alignItems: 'center'
+                }}>
+                    {/* Interval Size */}
+                    <div>
+                        <label htmlFor="interval-size" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                            Distance Interval (m):
+                        </label>
+                        <input
+                            id="interval-size"
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={intervalSize}
+                            onChange={handleIntervalSizeChange}
+                            style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+
+                    {/* Min Distance */}
+                    <div>
+                        <label htmlFor="min-distance" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                            Min Distance (m):
+                        </label>
+                        <input
+                            id="min-distance"
+                            type="number"
+                            min="0"
+                            max={maxDistance - 1}
+                            value={minDistance}
+                            onChange={handleMinDistanceChange}
+                            style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+
+                    {/* Max Distance */}
+                    <div>
+                        <label htmlFor="max-distance" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                            Max Distance (m):
+                        </label>
+                        <input
+                            id="max-distance"
+                            type="number"
+                            min={minDistance + 1}
+                            max="1000"
+                            value={maxDistance}
+                            onChange={handleMaxDistanceChange}
+                            style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+
+                    {/* Tolerance */}
+                    <div>
+                        <label htmlFor="tolerance" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                            Green Phase Tolerance (±s):
+                        </label>
+                        <input
+                            id="tolerance"
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={tolerance}
+                            onChange={handleToleranceChange}
+                            style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+
+                    {/* X-Axis Interval */}
+                    <div>
+                        <label htmlFor="x-axis-interval" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
+                            X-Axis Label Interval:
+                        </label>
+                        <input
+                            id="x-axis-interval"
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={xAxisInterval}
+                            onChange={handleXAxisIntervalChange}
+                            style={{
+                                width: '70px',
+                                padding: '6px 8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
                 </div>
 
-                <div>
-                    <label htmlFor="tolerance" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
-                        Green Phase Tolerance (±s):
-                    </label>
-                    <input
-                        id="tolerance"
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={tolerance}
-                        onChange={handleToleranceChange}
-                        style={{
-                            width: '70px',
-                            padding: '6px 8px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontSize: '14px'
-                        }}
-                    />
-                </div>
-
-                <div>
-                    <label htmlFor="x-axis-interval" style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: '500' }}>
-                        X-Axis Label Interval:
-                    </label>
-                    <input
-                        id="x-axis-interval"
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={xAxisInterval}
-                        onChange={handleXAxisIntervalChange}
-                        style={{
-                            width: '70px',
-                            padding: '6px 8px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontSize: '14px'
-                        }}
-                    />
-                </div>
-
-                <div style={{ marginLeft: 'auto' }}>
-                    <p style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic' }}>
-                        Changes will recalculate analysis with new parameters
-                    </p>
-                </div>
+                <p style={{
+                    fontSize: '13px',
+                    color: '#6b7280',
+                    fontStyle: 'italic',
+                    marginTop: '12px'
+                }}>
+                    Changes will recalculate analysis with new parameters.
+                    {absoluteMaxDistance > 0 && ` Data contains distances up to ${Math.ceil(absoluteMaxDistance)}m.`}
+                </p>
             </div>
 
             {/* Summary Stats Section */}
@@ -539,16 +645,16 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
 
                 <div>
                     <h4 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
-                        Analysis Parameters
+                        Distance Range
                     </h4>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                        Distance Intervals: {intervalSize}m
+                        Min: {minDistance}m
                     </p>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                        Green Phase Tolerance: ±{tolerance} seconds
+                        Max: {Math.min(maxDistance, absoluteMaxDistance)}m
                     </p>
                     <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                        Acceleration Rate: {ACCELERATION_FACTOR_TRAM} m/s²
+                        Interval Size: {intervalSize}m
                     </p>
                 </div>
             </div>
@@ -584,6 +690,57 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                     By Advice Type
                 </button>
             </div>
+
+            {/* Advice Type Toggles - Only show when advice-type visualization is selected */}
+            {visualizationType === 'advice-type' && (
+                <div style={{
+                    marginBottom: '16px',
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    backgroundColor: 'white',
+                    padding: '12px',
+                    borderRadius: '6px'
+                }}>
+                    <span style={{ fontSize: '14px', fontWeight: '500', marginRight: '4px' }}>Show:</span>
+                    <button
+                        onClick={() => setShowAccelerate(!showAccelerate)}
+                        style={getToggleButtonStyle(showAccelerate)}
+                    >
+                        <div style={{
+                            width: '10px',
+                            height: '10px',
+                            backgroundColor: '#22c55e',
+                            borderRadius: '50%'
+                        }}></div>
+                        Accelerate
+                    </button>
+                    <button
+                        onClick={() => setShowCruise(!showCruise)}
+                        style={getToggleButtonStyle(showCruise)}
+                    >
+                        <div style={{
+                            width: '10px',
+                            height: '10px',
+                            backgroundColor: '#3b82f6',
+                            borderRadius: '50%'
+                        }}></div>
+                        Cruise
+                    </button>
+                    <button
+                        onClick={() => setShowDecelerate(!showDecelerate)}
+                        style={getToggleButtonStyle(showDecelerate)}
+                    >
+                        <div style={{
+                            width: '10px',
+                            height: '10px',
+                            backgroundColor: '#ef4444',
+                            borderRadius: '50%'
+                        }}></div>
+                        Decelerate
+                    </button>
+                </div>
+            )}
 
             {/* Chart Visualization */}
             <div style={{
@@ -659,33 +816,43 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                             <Legend />
                             <ReferenceLine y={80} stroke="#15803d" strokeDasharray="3 3" />
                             <ReferenceLine y={60} stroke="#ca8a04" strokeDasharray="3 3" />
-                            <Line
-                                type="monotone"
-                                dataKey="Accelerate Success Rate"
-                                stroke="#22c55e"
-                                strokeWidth={2}
-                                dot={{ r: 4 }}
-                                activeDot={{ r: 6 }}
-                                name="Accelerate"
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="Cruise Success Rate"
-                                stroke="#3b82f6"
-                                strokeWidth={2}
-                                dot={{ r: 4 }}
-                                activeDot={{ r: 6 }}
-                                name="Cruise"
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="Decelerate Success Rate"
-                                stroke="#ef4444"
-                                strokeWidth={2}
-                                dot={{ r: 4 }}
-                                activeDot={{ r: 6 }}
-                                name="Decelerate"
-                            />
+
+                            {/* Only show selected advice types */}
+                            {showAccelerate && (
+                                <Line
+                                    type="monotone"
+                                    dataKey="Accelerate Success Rate"
+                                    stroke="#22c55e"
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }}
+                                    activeDot={{ r: 6 }}
+                                    name="Accelerate"
+                                />
+                            )}
+
+                            {showCruise && (
+                                <Line
+                                    type="monotone"
+                                    dataKey="Cruise Success Rate"
+                                    stroke="#3b82f6"
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }}
+                                    activeDot={{ r: 6 }}
+                                    name="Cruise"
+                                />
+                            )}
+
+                            {showDecelerate && (
+                                <Line
+                                    type="monotone"
+                                    dataKey="Decelerate Success Rate"
+                                    stroke="#ef4444"
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }}
+                                    activeDot={{ r: 6 }}
+                                    name="Decelerate"
+                                />
+                            )}
                         </LineChart>
                     )}
                 </ResponsiveContainer>
@@ -701,7 +868,7 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
                 </p>
                 <ol style={{ paddingLeft: '20px', fontSize: '14px', color: '#374151' }}>
                     <li style={{ marginBottom: '8px' }}>
-                        Dividing the approach into {intervalSize}m distance intervals
+                        Analyzing data between {minDistance}m and {Math.min(maxDistance, absoluteMaxDistance)}m from the intersection, in {intervalSize}m intervals
                     </li>
                     <li style={{ marginBottom: '8px' }}>
                         Finding the first useful advice (accelerate/cruise/decelerate) in each interval
