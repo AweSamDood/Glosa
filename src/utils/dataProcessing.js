@@ -445,6 +445,26 @@ export const processPassThrough = (events, passIndex) => {
         }
     }
 
+// NEW CODE: If no signal groups were predicted but there's only one with valid movement events,
+// add it to the predictions
+    if (predictedSignalGroupsUsed.length === 0) {
+        // Find signal groups with valid movement events
+        const validSGs = Object.values(signalGroupsData).filter(sg =>
+            sg.hasMovementEvents && !sg.allMovementEventsUnavailable
+        );
+
+        // If there's only one valid signal group, use it regardless of light state
+        if (validSGs.length === 1) {
+            predictedSignalGroupsUsed.push({
+                signalGroup: validSGs[0].name,
+                reason: "Only valid signal group for passage (GPS timing may be off)"
+            });
+
+            // Update the intersection summary to note this special case
+            console.log(`Pass-through ${passIndex}: Only one valid signal group (${validSGs[0].name}) - added to predictions despite no green phase`);
+        }
+    }
+
     // Determine the warning level
     const allSignalGroupsHaveAvailableEvents = Object.values(signalGroupsData).every(sg =>
         sg.hasMovementEvents && !sg.allMovementEventsUnavailable

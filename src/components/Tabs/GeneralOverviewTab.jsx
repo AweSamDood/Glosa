@@ -1,10 +1,13 @@
-// src/components/Tabs/GeneralOverviewTab.jsx
+// src/components/Tabs/GeneralOverviewTab.jsx - Updated Version
 import React, { useMemo } from 'react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer
 } from 'recharts';
+import FilterableGlosaAdviceDistribution from '../GLOSA/FilterableGlosaAdviceDistribution';
+import DistanceSegmentedGlosaAnalysis from '../GLOSA/DistanceSegmentedGlosaAnalysis';
+
 
 const GeneralOverviewTab = ({ intersections }) => {
     // Compute aggregated statistics
@@ -346,6 +349,27 @@ const GeneralOverviewTab = ({ intersections }) => {
                 </div>
             )}
 
+            {/* GLOSA Advice Distribution - NEW ENHANCED VERSION */}
+            <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
+
+                {/* First GLOSA Distribution with Filters */}
+                <FilterableGlosaAdviceDistribution
+                    intersections={intersections}
+                    instanceId={1}
+                />
+
+                {/* Second GLOSA Distribution with Filters */}
+                <FilterableGlosaAdviceDistribution
+                    intersections={intersections}
+                    instanceId={2}
+                />
+                {/* New Distance-Segmented Analysis */}
+                <DistanceSegmentedGlosaAnalysis
+                    intersections={intersections}
+                />
+            </div>
+
             {/* Intersections List */}
             <div style={{ marginBottom: '32px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Intersections</h3>
@@ -553,10 +577,10 @@ const GeneralOverviewTab = ({ intersections }) => {
                 </div>
             )}
 
-            {/* GLOSA Advice Distribution */}
+            {/* Original GLOSA Advice Distribution - For Backwards Compatibility */}
             {glosaAdviceData.length > 0 && (
                 <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Distribution</h3>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Overall GLOSA Advice Distribution</h3>
                     <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
                         <div style={{ height: '400px' }}>
                             <ResponsiveContainer width="100%" height="100%">
