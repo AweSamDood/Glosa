@@ -6,6 +6,8 @@ import {
 } from 'recharts';
 import SimplifiedGlosaAdviceDistribution from '../GLOSA/SimplifiedGlosaAdviceDistribution';
 import SimplifiedDistanceSegmentedGlosaAnalysis from '../GLOSA/SimplifiedDistanceSegmentedGlosaAnalysis';
+import GlosaAdviceSimulationAnalysis from '../GLOSA/GlosaAdviceSimulationAnalysis';
+
 
 const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
     // Toggle for Advanced Analysis section
@@ -334,7 +336,12 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                             </div>
                         )}
 
-                        {/* GLOSA Analysis Components */}
+                        {/* GLOSA Advice Simulation Analysis */}
+                        <GlosaAdviceSimulationAnalysis
+                            intersections={dataToUse}
+                        />
+
+                        {/* Existing GLOSA Analysis Components */}
                         <div style={{ marginBottom: '32px' }}>
                             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
 

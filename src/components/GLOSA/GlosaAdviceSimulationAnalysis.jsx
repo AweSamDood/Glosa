@@ -1,0 +1,675 @@
+// src/components/GLOSA/GlosaAdviceSimulationAnalysis.jsx
+// This component analyzes GLOSA advice reliability by simulating vehicle behavior
+// It evaluates how often following GLOSA advice leads to a green light at various distances
+import React, { useState, useMemo } from 'react';
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    LineChart, Line, ReferenceLine
+} from 'recharts';
+
+// Constants matching the recalculation script
+const ACCELERATION_FACTOR_TRAM = 1.3; // m/s²
+const MIN_ALLOWED_SPEED_TRAM = 8 / 3.6; // m/s (8 km/h)
+const MAX_ALLOWED_SPEED = 50 / 3.6; // m/s (50 km/h)
+const INTERVAL_SIZE = 5; // meters
+
+
+const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
+    // State for visualization toggle
+    const [visualizationType, setVisualizationType] = useState('success-rate');
+
+    // Distance intervals to analyze (in meters)
+    const distanceIntervals = useMemo(() => {
+        // Create intervals from 0 to max distance found in data, in steps of INTERVAL_SIZE
+        let maxDistance = 0;
+
+        // Find maximum distance in the data
+        Object.values(intersections).forEach(intersection => {
+            (intersection.passThroughs || []).forEach(pass => {
+                Object.values(pass.signalGroups || {}).forEach(sg => {
+                    (sg.metrics || []).forEach(metric => {
+                        if (metric.distance > maxDistance) {
+                            maxDistance = metric.distance;
+                        }
+                    });
+                });
+            });
+        });
+
+        // Round up to nearest interval
+        const maxIntervalEnd = Math.ceil(maxDistance / INTERVAL_SIZE) * INTERVAL_SIZE;
+
+        // Create array of intervals
+        const intervals = [];
+        for (let i = 0; i < maxIntervalEnd; i += INTERVAL_SIZE) {
+            intervals.push({
+                min: i,
+                max: i + INTERVAL_SIZE,
+                label: `${i}-${i + INTERVAL_SIZE}m`
+            });
+        }
+
+        return intervals;
+    }, [intersections]);
+
+    // Analyze GLOSA advice reliability in each interval
+    const analysisResults = useMemo(() => {
+        const results = distanceIntervals.map(interval => {
+            // Stats for this interval
+            const stats = {
+                interval: interval.label,
+                min: interval.min,
+                max: interval.max,
+                totalAdvice: 0,
+                successfulAdvice: 0,
+                byAdviceType: {
+                    accelerate: { total: 0, success: 0 },
+                    cruise: { total: 0, success: 0 },
+                    decelerate: { total: 0, success: 0 }
+                }
+            };
+
+            // Process each intersection
+            Object.values(intersections).forEach(intersection => {
+                (intersection.passThroughs || []).forEach(pass => {
+                    // For each pass-through, analyze all signal groups
+                    Object.values(pass.signalGroups || {}).forEach(sg => {
+                        // Find metrics within this distance interval
+                        const metricsInInterval = (sg.metrics || []).filter(metric =>
+                            metric.distance >= interval.min &&
+                            metric.distance < interval.max &&
+                            metric.glosaAdvice &&
+                            ["accelerate", "cruise", "decelerate"].includes(metric.glosaAdvice.toLowerCase())
+                        );
+
+                        if (metricsInInterval.length === 0) return; // No useful advice in this interval
+
+                        // Take the first useful advice in this interval
+                        const firstAdviceMetric = metricsInInterval[0];
+                        const advice = firstAdviceMetric.glosaAdvice.toLowerCase();
+                        const currentSpeed = firstAdviceMetric.speed / 3.6; // Convert km/h to m/s
+                        const advisedSpeed = firstAdviceMetric.glosaSpeedKph / 3.6; // Convert km/h to m/s
+                        const distance = firstAdviceMetric.distance;
+                        const timestamp = firstAdviceMetric.timestamp;
+
+                        stats.totalAdvice++;
+                        stats.byAdviceType[advice].total++;
+
+                        // Simulate following the advice
+                        const travelDuration = simulateTravel(
+                            distance,
+                            currentSpeed,
+                            advisedSpeed
+                        );
+
+                        // Calculate arrival time
+                        const arrivalTime = new Date(timestamp.getTime() + (travelDuration * 1000));
+
+                        // Check if arrival would be during a green phase (+/- 2 seconds tolerance)
+                        const wouldArriveOnGreen = checkGreenPhaseAtArrival(
+                            sg,
+                            arrivalTime,
+                            2 // 2 seconds tolerance
+                        );
+
+                        if (wouldArriveOnGreen) {
+                            stats.successfulAdvice++;
+                            stats.byAdviceType[advice].success++;
+                        }
+                    });
+                });
+            });
+
+            // Calculate success rates
+            if (stats.totalAdvice > 0) {
+                stats.successRate = (stats.successfulAdvice / stats.totalAdvice) * 100;
+
+                // Calculate success rates by advice type
+                Object.keys(stats.byAdviceType).forEach(adviceType => {
+                    const typeStats = stats.byAdviceType[adviceType];
+                    if (typeStats.total > 0) {
+                        typeStats.successRate = (typeStats.success / typeStats.total) * 100;
+                    } else {
+                        typeStats.successRate = 0;
+                    }
+                });
+            } else {
+                stats.successRate = 0;
+            }
+
+            return stats;
+        });
+
+        return results;
+    }, [intersections, distanceIntervals]);
+
+    // Simulate travel time based on acceleration/deceleration model from the recalculation script
+    function simulateTravel(distance, currentSpeed, targetSpeed) {
+        // Ensure minimum speed thresholds and cap maximum speed
+        currentSpeed = Math.max(0, currentSpeed); // Ensure non-negative current speed
+        targetSpeed = Math.max(MIN_ALLOWED_SPEED_TRAM, Math.min(MAX_ALLOWED_SPEED, targetSpeed));
+
+        // For very small distances, return a minimal time
+        if (distance < 0.1) {
+            return 0.1; // 100ms minimum
+        }
+
+        // Time to accelerate/decelerate to target speed
+        const speedDiff = targetSpeed - currentSpeed;
+        const accelTime = Math.abs(speedDiff) / ACCELERATION_FACTOR_TRAM;
+
+        // Distance covered during acceleration/deceleration
+        const accelDistance = (currentSpeed * accelTime) +
+            (0.5 * Math.sign(speedDiff) * ACCELERATION_FACTOR_TRAM * accelTime * accelTime);
+
+        // If acceleration covers the entire distance
+        if (accelDistance >= distance) {
+            // Calculate exact time for partial acceleration
+            try {
+                if (speedDiff >= 0) { // Accelerating
+                    return (Math.sqrt(currentSpeed * currentSpeed + 2 * ACCELERATION_FACTOR_TRAM * distance) - currentSpeed) / ACCELERATION_FACTOR_TRAM;
+                } else { // Decelerating
+                    // Make sure we don't have negative values under the square root
+                    if (currentSpeed * currentSpeed - 2 * ACCELERATION_FACTOR_TRAM * distance < 0) {
+                        // Can't decelerate enough in this distance, use approximation
+                        return distance / ((currentSpeed + targetSpeed) / 2);
+                    }
+                    return (currentSpeed - Math.sqrt(currentSpeed * currentSpeed - 2 * ACCELERATION_FACTOR_TRAM * distance)) / ACCELERATION_FACTOR_TRAM;
+                }
+            } catch (error) {
+                // Fallback for any calculation errors
+                console.warn("Error in travel time calculation, using approximation:", error);
+                return distance / ((currentSpeed + targetSpeed) / 2); // Simple average speed approximation
+            }
+        }
+
+        // Remaining distance at target speed
+        const remainingDistance = distance - accelDistance;
+        const cruiseTime = remainingDistance / targetSpeed;
+
+        // Total travel time
+        return accelTime + cruiseTime;
+    }
+
+    // Check if there would be a green phase at the arrival time
+    function checkGreenPhaseAtArrival(signalGroup, arrivalTime, toleranceSeconds) {
+        // Find metrics with timestamps close to the arrival time
+        const relevantMetrics = signalGroup.metrics.filter(metric => {
+            const timeDiff = Math.abs(metric.timestamp - arrivalTime) / 1000; // in seconds
+            return timeDiff <= 30; // Look at metrics within 30 seconds of arrival time
+        });
+
+        if (relevantMetrics.length === 0) return false;
+
+        // Sort by timestamp to find closest metrics before and after arrival
+        relevantMetrics.sort((a, b) => a.timestamp - b.timestamp);
+
+        // Check each metric for green phase information
+        for (const metric of relevantMetrics) {
+            // First try checking movement events
+            if (metric.movementEvents && metric.movementEvents.length > 0) {
+                for (const movementEvent of metric.movementEvents) {
+                    // Skip if not a green phase state
+                    if (!["permissiveMovementAllowed", "protectedMovementAllowed"].includes(movementEvent.state)) {
+                        continue;
+                    }
+
+                    // Check if arrivalTime is within this green phase (+/- tolerance)
+                    if (movementEvent.startTime && movementEvent.minEndTime) {
+                        const startTime = new Date(movementEvent.startTime);
+                        const endTime = new Date(movementEvent.minEndTime);
+
+                        // If startTime is default value (epoch), consider it as "already started"
+                        const isDefaultStart = startTime.getTime() === 0 ||
+                            startTime.toISOString() === "1970-01-01T00:00:00.000Z" ||
+                            startTime.toISOString() === "1970-01-01T00:00:00Z";
+
+                        // Add tolerance to check range
+                        const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
+                        const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
+
+                        // Check if arrival window overlaps with green phase
+                        if (isDefaultStart) {
+                            // For default start time, check if arrival is before end time
+                            if (arrivalEarly <= endTime) {
+                                return true;
+                            }
+                        } else if ((arrivalEarly <= endTime && arrivalLate >= startTime) ||
+                            (startTime <= arrivalLate && endTime >= arrivalEarly)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Alternative check using greenStartTime and greenEndTime if available
+            // This is often more directly usable than movement events
+            if (metric.greenStartTime !== undefined && metric.greenEndTime !== undefined) {
+                if (metric.greenStartTime === 0 && metric.greenEndTime > 0) {
+                    // Currently in green phase at this metric's timestamp
+                    const metricTime = metric.timestamp;
+                    const greenEndTime = new Date(metricTime.getTime() + (metric.greenEndTime * 1000));
+
+                    // Add tolerance to check range
+                    const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
+
+                    // Check if arrival is before green ends
+                    if (arrivalEarly <= greenEndTime) {
+                        return true;
+                    }
+                } else if (metric.greenStartTime > 0) {
+                    // Green phase will start in the future
+                    const metricTime = metric.timestamp;
+                    const greenStartTime = new Date(metricTime.getTime() + (metric.greenStartTime * 1000));
+                    const greenEndTime = metric.greenEndTime ?
+                        new Date(metricTime.getTime() + (metric.greenEndTime * 1000)) : null;
+
+                    // Add tolerance to check range
+                    const arrivalEarly = new Date(arrivalTime.getTime() - (toleranceSeconds * 1000));
+                    const arrivalLate = new Date(arrivalTime.getTime() + (toleranceSeconds * 1000));
+
+                    // Check if arrival overlaps with green phase
+                    if (greenEndTime && arrivalEarly <= greenEndTime && arrivalLate >= greenStartTime) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // Prepare data for visualization
+    const chartData = useMemo(() => {
+        return analysisResults.filter(result => result.totalAdvice > 0);
+    }, [analysisResults]);
+
+    // Prepare data for advice type breakdown
+    const adviceTypeData = useMemo(() => {
+        return chartData.map(result => ({
+            interval: result.interval,
+            min: result.min,
+            'Accelerate Success Rate': result.byAdviceType.accelerate.successRate || 0,
+            'Cruise Success Rate': result.byAdviceType.cruise.successRate || 0,
+            'Decelerate Success Rate': result.byAdviceType.decelerate.successRate || 0,
+            'Accelerate Count': result.byAdviceType.accelerate.total || 0,
+            'Cruise Count': result.byAdviceType.cruise.total || 0,
+            'Decelerate Count': result.byAdviceType.decelerate.total || 0
+        }));
+    }, [chartData]);
+
+    // Custom tooltip for the chart
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div style={{
+                    backgroundColor: 'white',
+                    padding: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px'
+                }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{label}</p>
+                    <p style={{ margin: '0 0 3px 0' }}>
+                        Success Rate: {data.successRate.toFixed(1)}%
+                    </p>
+                    <p style={{ margin: '0 0 3px 0' }}>
+                        Total Advice: {data.totalAdvice}
+                    </p>
+                    <p style={{ margin: '0 0 3px 0' }}>
+                        Successful: {data.successfulAdvice}
+                    </p>
+                    <p style={{ margin: '0 0 3px 0', color: '#22c55e' }}>
+                        Accelerate: {data.byAdviceType.accelerate.success}/{data.byAdviceType.accelerate.total}
+                        {data.byAdviceType.accelerate.total > 0 ?
+                            ` (${(data.byAdviceType.accelerate.success / data.byAdviceType.accelerate.total * 100).toFixed(1)}%)` : ''}
+                    </p>
+                    <p style={{ margin: '0 0 3px 0', color: '#3b82f6' }}>
+                        Cruise: {data.byAdviceType.cruise.success}/{data.byAdviceType.cruise.total}
+                        {data.byAdviceType.cruise.total > 0 ?
+                            ` (${(data.byAdviceType.cruise.success / data.byAdviceType.cruise.total * 100).toFixed(1)}%)` : ''}
+                    </p>
+                    <p style={{ margin: '0 0 3px 0', color: '#ef4444' }}>
+                        Decelerate: {data.byAdviceType.decelerate.success}/{data.byAdviceType.decelerate.total}
+                        {data.byAdviceType.decelerate.total > 0 ?
+                            ` (${(data.byAdviceType.decelerate.success / data.byAdviceType.decelerate.total * 100).toFixed(1)}%)` : ''}
+                    </p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    // Advice type tooltip
+    const AdviceTypeTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div style={{
+                    backgroundColor: 'white',
+                    padding: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px'
+                }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{label}</p>
+                    {payload.map((entry, index) => (
+                        <p key={index} style={{
+                            margin: '0 0 3px 0',
+                            color: entry.color,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            width: '220px'
+                        }}>
+                            <span>{entry.name}:</span>
+                            <span>{entry.value.toFixed(1)}%</span>
+                        </p>
+                    ))}
+                    <div style={{ borderTop: '1px solid #eee', marginTop: '5px', paddingTop: '5px' }}>
+                        <p style={{ margin: '0 0 3px 0', fontSize: '12px' }}>
+                            Sample Counts:
+                        </p>
+                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#22c55e' }}>
+                            Accelerate: {payload[0].payload['Accelerate Count']}
+                        </p>
+                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#3b82f6' }}>
+                            Cruise: {payload[0].payload['Cruise Count']}
+                        </p>
+                        <p style={{ margin: '0 0 3px 0', fontSize: '12px', color: '#ef4444' }}>
+                            Decelerate: {payload[0].payload['Decelerate Count']}
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    // Calculate overall statistics
+    const overallStats = useMemo(() => {
+        let totalAdvice = 0;
+        let totalSuccess = 0;
+        let adviceTypeCounts = {
+            accelerate: { total: 0, success: 0 },
+            cruise: { total: 0, success: 0 },
+            decelerate: { total: 0, success: 0 }
+        };
+
+        analysisResults.forEach(result => {
+            totalAdvice += result.totalAdvice;
+            totalSuccess += result.successfulAdvice;
+
+            Object.entries(result.byAdviceType).forEach(([adviceType, stats]) => {
+                adviceTypeCounts[adviceType].total += stats.total;
+                adviceTypeCounts[adviceType].success += stats.success;
+            });
+        });
+
+        const successRate = totalAdvice > 0 ? (totalSuccess / totalAdvice) * 100 : 0;
+
+        // Calculate success rates by advice type
+        Object.keys(adviceTypeCounts).forEach(adviceType => {
+            const stats = adviceTypeCounts[adviceType];
+            stats.successRate = stats.total > 0 ? (stats.success / stats.total) * 100 : 0;
+        });
+
+        return {
+            totalAdvice,
+            totalSuccess,
+            successRate,
+            adviceTypeCounts
+        };
+    }, [analysisResults]);
+
+    return (
+        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
+                GLOSA Advice Reliability Analysis
+            </h3>
+
+            {/* Summary Stats Section */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '16px',
+                marginBottom: '24px',
+                backgroundColor: 'white',
+                padding: '16px',
+                borderRadius: '8px'
+            }}>
+                <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
+                        Overall Success Rate
+                    </h4>
+                    <p style={{
+                        fontSize: '24px',
+                        fontWeight: '600',
+                        color: overallStats.successRate > 80 ? '#15803d' :
+                            overallStats.successRate > 60 ? '#ca8a04' : '#dc2626'
+                    }}>
+                        {overallStats.successRate.toFixed(1)}%
+                    </p>
+                    <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                        {overallStats.totalSuccess} out of {overallStats.totalAdvice} advices
+                    </p>
+                </div>
+
+                <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
+                        By Advice Type
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div>
+                            <span style={{ color: '#22c55e', fontWeight: '500' }}>Accelerate:</span>{' '}
+                            {overallStats.adviceTypeCounts.accelerate.successRate.toFixed(1)}%
+                            <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '4px' }}>
+                                ({overallStats.adviceTypeCounts.accelerate.success}/{overallStats.adviceTypeCounts.accelerate.total})
+                            </span>
+                        </div>
+                        <div>
+                            <span style={{ color: '#3b82f6', fontWeight: '500' }}>Cruise:</span>{' '}
+                            {overallStats.adviceTypeCounts.cruise.successRate.toFixed(1)}%
+                            <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '4px' }}>
+                                ({overallStats.adviceTypeCounts.cruise.success}/{overallStats.adviceTypeCounts.cruise.total})
+                            </span>
+                        </div>
+                        <div>
+                            <span style={{ color: '#ef4444', fontWeight: '500' }}>Decelerate:</span>{' '}
+                            {overallStats.adviceTypeCounts.decelerate.successRate.toFixed(1)}%
+                            <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '4px' }}>
+                                ({overallStats.adviceTypeCounts.decelerate.success}/{overallStats.adviceTypeCounts.decelerate.total})
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>
+                        Analysis Parameters
+                    </h4>
+                    <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                        Distance Intervals: {INTERVAL_SIZE}m
+                    </p>
+                    <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                        Green Phase Tolerance: ±2 seconds
+                    </p>
+                    <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                        Acceleration Rate: {ACCELERATION_FACTOR_TRAM} m/s²
+                    </p>
+                </div>
+            </div>
+
+            {/* Visualization Toggle */}
+            <div style={{ marginBottom: '16px', display: 'flex', gap: '16px' }}>
+                <button
+                    onClick={() => setVisualizationType('success-rate')}
+                    style={{
+                        padding: '8px 16px',
+                        backgroundColor: visualizationType === 'success-rate' ? '#3b82f6' : '#f3f4f6',
+                        color: visualizationType === 'success-rate' ? 'white' : '#374151',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '500',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Overall Success Rate
+                </button>
+                <button
+                    onClick={() => setVisualizationType('advice-type')}
+                    style={{
+                        padding: '8px 16px',
+                        backgroundColor: visualizationType === 'advice-type' ? '#3b82f6' : '#f3f4f6',
+                        color: visualizationType === 'advice-type' ? 'white' : '#374151',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '500',
+                        cursor: 'pointer'
+                    }}
+                >
+                    By Advice Type
+                </button>
+            </div>
+
+            {/* Chart Visualization */}
+            <div style={{
+                height: '500px',
+                backgroundColor: 'white',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '16px'
+            }}>
+                <ResponsiveContainer width="100%" height="100%">
+                    {visualizationType === 'success-rate' ? (
+                        <BarChart
+                            data={chartData}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                                dataKey="interval"
+                                angle={-45}
+                                textAnchor="end"
+                                height={70}
+                                interval={0}
+                                label={{ value: 'Distance from Intersection (m)', position: 'insideBottom', offset: -5 }}
+                            />
+                            <YAxis
+                                label={{ value: 'Success Rate (%)', angle: -90, position: 'insideLeft' }}
+                                domain={[0, 100]}
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend />
+                            <ReferenceLine y={80} stroke="#15803d" strokeDasharray="3 3" />
+                            <ReferenceLine y={60} stroke="#ca8a04" strokeDasharray="3 3" />
+                            <Bar
+                                dataKey="successRate"
+                                name="Success Rate"
+                                fill="#3b82f6"
+                                shape={(props) => {
+                                    // Color based on success rate
+                                    const fill = props.payload.successRate > 80 ? '#15803d' :
+                                        props.payload.successRate > 60 ? '#ca8a04' : '#dc2626';
+                                    return (
+                                        <rect
+                                            x={props.x}
+                                            y={props.y}
+                                            width={props.width}
+                                            height={props.height}
+                                            fill={fill}
+                                            stroke="none"
+                                        />
+                                    );
+                                }}
+                            />
+                        </BarChart>
+                    ) : (
+                        <LineChart
+                            data={adviceTypeData}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                                dataKey="interval"
+                                angle={-45}
+                                textAnchor="end"
+                                height={70}
+                                interval={0}
+                                label={{ value: 'Distance from Intersection (m)', position: 'insideBottom', offset: -5 }}
+                            />
+                            <YAxis
+                                label={{ value: 'Success Rate (%)', angle: -90, position: 'insideLeft' }}
+                                domain={[0, 100]}
+                            />
+                            <Tooltip content={<AdviceTypeTooltip />} />
+                            <Legend />
+                            <ReferenceLine y={80} stroke="#15803d" strokeDasharray="3 3" />
+                            <ReferenceLine y={60} stroke="#ca8a04" strokeDasharray="3 3" />
+                            <Line
+                                type="monotone"
+                                dataKey="Accelerate Success Rate"
+                                stroke="#22c55e"
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
+                                name="Accelerate"
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="Cruise Success Rate"
+                                stroke="#3b82f6"
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
+                                name="Cruise"
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="Decelerate Success Rate"
+                                stroke="#ef4444"
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
+                                name="Decelerate"
+                            />
+                        </LineChart>
+                    )}
+                </ResponsiveContainer>
+            </div>
+
+            {/* Analysis Explanation */}
+            <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '8px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+                    How This Analysis Works
+                </h4>
+                <p style={{ fontSize: '14px', color: '#374151', marginBottom: '12px' }}>
+                    This analysis evaluates the reliability of GLOSA advice at different distances from intersections by:
+                </p>
+                <ol style={{ paddingLeft: '20px', fontSize: '14px', color: '#374151' }}>
+                    <li style={{ marginBottom: '8px' }}>
+                        Dividing the approach into {INTERVAL_SIZE}m distance intervals
+                    </li>
+                    <li style={{ marginBottom: '8px' }}>
+                        Finding the first useful advice (accelerate/cruise/decelerate) in each interval
+                    </li>
+                    <li style={{ marginBottom: '8px' }}>
+                        Simulating vehicle behavior when following that advice, using the same acceleration/deceleration model as the GLOSA system
+                    </li>
+                    <li style={{ marginBottom: '8px' }}>
+                        Calculating the expected arrival time at the intersection
+                    </li>
+                    <li style={{ marginBottom: '8px' }}>
+                        Checking if that arrival time coincides with an actual green phase (±2 seconds tolerance)
+                    </li>
+                    <li>
+                        Calculating success rate: percentage of advice that would successfully get the vehicle through a green light
+                    </li>
+                </ol>
+                <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '12px', fontStyle: 'italic' }}>
+                    Higher success rates indicate more reliable GLOSA advice at that distance. Rates above 80% are considered good (green),
+                    60-80% are moderate (yellow), and below 60% are poor (red).
+                </p>
+            </div>
+        </div>
+    );
+};
+
+export default GlosaAdviceSimulationAnalysis;
