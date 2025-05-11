@@ -1,5 +1,4 @@
-// src/components/Tabs/GeneralOverviewTab.jsx - Updated Version
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -7,10 +6,23 @@ import {
 } from 'recharts';
 import FilterableGlosaAdviceDistribution from '../GLOSA/FilterableGlosaAdviceDistribution';
 import DistanceSegmentedGlosaAnalysis from '../GLOSA/DistanceSegmentedGlosaAnalysis';
-
+import GlobalFilteringSection from '../Filtering/GlobalFilteringSection';
 
 const GeneralOverviewTab = ({ intersections }) => {
-    // Compute aggregated statistics
+    // State for the filtered data used in Advanced Analysis
+    const [filteredData, setFilteredData] = useState(intersections);
+    const [activeFilters, setActiveFilters] = useState(null);
+
+    // Toggle for Advanced Analysis section
+    const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
+
+    // Handle filter changes from GlobalFilteringSection
+    const handleFilterChange = (newFilteredData, filters) => {
+        setFilteredData(newFilteredData);
+        setActiveFilters(filters);
+    };
+
+    // Compute aggregated statistics for the overview
     const stats = useMemo(() => {
         if (!intersections || Object.keys(intersections).length === 0) {
             return {
@@ -235,6 +247,11 @@ const GeneralOverviewTab = ({ intersections }) => {
     // Colors for charts
     const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#9ca3af'];
 
+    // Toggle Advanced Analysis section
+    const toggleAdvancedAnalysis = () => {
+        setShowAdvancedAnalysis(prev => !prev);
+    };
+
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '24px' }}>
@@ -262,6 +279,100 @@ const GeneralOverviewTab = ({ intersections }) => {
                     <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Time Range</h3>
                     <p style={{ fontSize: '14px', color: '#111827' }}>{formattedTimeRange}</p>
                 </div>
+            </div>
+
+            {/* Advanced Analysis Section */}
+            <div style={{ marginBottom: '32px' }}>
+                <button
+                    onClick={toggleAdvancedAnalysis}
+                    style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '16px',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '8px',
+                        border: 'none',
+                        fontWeight: '600',
+                        fontSize: '18px',
+                        color: '#111827',
+                        cursor: 'pointer',
+                        marginBottom: showAdvancedAnalysis ? '16px' : '0'
+                    }}
+                >
+                    <span>Advanced GLOSA Analysis</span>
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        style={{
+                            width: '20px',
+                            height: '20px',
+                            transform: showAdvancedAnalysis ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.2s ease'
+                        }}
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
+
+                {showAdvancedAnalysis && (
+                    <>
+                        {/* Global Filtering Section */}
+                        <GlobalFilteringSection
+                            intersections={intersections}
+                            onFilterChange={handleFilterChange}
+                        />
+
+                        {/* Filtered Data Info */}
+                        {activeFilters && (
+                            <div style={{
+                                backgroundColor: '#f0f9ff',
+                                borderRadius: '8px',
+                                padding: '12px 16px',
+                                marginBottom: '24px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div>
+                                    <span style={{ fontWeight: '500' }}>Filtered Data:</span> {Object.keys(filteredData).length} intersections with {
+                                    Object.values(filteredData).reduce((sum, int) => sum + int.passThroughs.length, 0)
+                                } pass-throughs
+                                </div>
+                                {Object.keys(filteredData).length === 0 && (
+                                    <span style={{ color: '#dc2626', fontWeight: '500' }}>No data matches current filters</span>
+                                )}
+                            </div>
+                        )}
+
+                        {/* GLOSA Analysis Components */}
+                        <div style={{ marginBottom: '32px' }}>
+                            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
+
+                            {/* First GLOSA Distribution with Filters */}
+                            <FilterableGlosaAdviceDistribution
+                                intersections={filteredData}
+                                instanceId={1}
+                            />
+
+                            {/* Second GLOSA Distribution with Filters */}
+                            <FilterableGlosaAdviceDistribution
+                                intersections={filteredData}
+                                instanceId={2}
+                            />
+
+                            {/* New Distance-Segmented Analysis */}
+                            <DistanceSegmentedGlosaAnalysis
+                                intersections={filteredData}
+                            />
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* Intersection Stability */}
@@ -348,27 +459,6 @@ const GeneralOverviewTab = ({ intersections }) => {
                     </div>
                 </div>
             )}
-
-            {/* GLOSA Advice Distribution - NEW ENHANCED VERSION */}
-            <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
-
-                {/* First GLOSA Distribution with Filters */}
-                <FilterableGlosaAdviceDistribution
-                    intersections={intersections}
-                    instanceId={1}
-                />
-
-                {/* Second GLOSA Distribution with Filters */}
-                <FilterableGlosaAdviceDistribution
-                    intersections={intersections}
-                    instanceId={2}
-                />
-                {/* New Distance-Segmented Analysis */}
-                <DistanceSegmentedGlosaAnalysis
-                    intersections={intersections}
-                />
-            </div>
 
             {/* Intersections List */}
             <div style={{ marginBottom: '32px' }}>

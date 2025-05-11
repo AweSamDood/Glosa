@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { getAdviceColor } from '../../utils/chartUtils';
 
-const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
+const DistanceSegmentedGlosaAnalysis = ({ intersections, filteredData }) => {
     // State for number of segments
     const [segmentCount, setSegmentCount] = useState(5);
     const [tempSegmentCount, setTempSegmentCount] = useState(5); // For input field
@@ -14,8 +14,11 @@ const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
         let min = Infinity;
         let max = 0;
 
+        // Use filtered data if provided, otherwise use all intersections
+        const dataToUse = filteredData || intersections;
+
         // Iterate through all intersections, passes, and metrics
-        Object.values(intersections).forEach(intersection => {
+        Object.values(dataToUse).forEach(intersection => {
             (intersection.passThroughs || []).forEach(pass => {
                 Object.values(pass.signalGroups || {}).forEach(sg => {
                     (sg.metrics || []).forEach(metric => {
@@ -36,28 +39,55 @@ const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
             min: Math.max(0, Math.floor(min)),
             max: Math.ceil(max)
         };
-    }, [intersections]);
+    }, [intersections, filteredData]);
 
     // State for segment boundaries
     const [segments, setSegments] = useState([]);
 
-    // Initialize segments evenly across the range when segmentCount changes
+    // Initialize segments with specified default values
     useEffect(() => {
-        const range = distanceRange.max - distanceRange.min;
-        const segmentSize = range / segmentCount;
+        // Create custom segments as specified
+        const defaultSegments = [
+            { id: 0, min: 0, max: 20 },
+            { id: 1, min: 20, max: 50 },
+            { id: 2, min: 50, max: 100 },
+            { id: 3, min: 100, max: 150 },
+            { id: 4, min: 150, max: Math.max(distanceRange.max, 200) } // Use max from data or at least 200
+        ];
 
-        const newSegments = Array.from({ length: segmentCount }, (_, i) => ({
-            id: i,
-            min: Math.round((distanceRange.min + i * segmentSize) * 10) / 10,
-            max: Math.round((distanceRange.min + (i + 1) * segmentSize) * 10) / 10
-        }));
+        setSegments(defaultSegments);
+    }, [distanceRange]);
 
-        // Ensure the last segment includes the max value exactly
-        if (newSegments.length > 0) {
-            newSegments[newSegments.length - 1].max = distanceRange.max;
+    // Regenerate default segments when segment count changes
+    useEffect(() => {
+        if (segmentCount === 5) {
+            // Use our custom default segments
+            const defaultSegments = [
+                { id: 0, min: 0, max: 20 },
+                { id: 1, min: 20, max: 50 },
+                { id: 2, min: 50, max: 100 },
+                { id: 3, min: 100, max: 150 },
+                { id: 4, min: 150, max: Math.max(distanceRange.max, 200) }
+            ];
+            setSegments(defaultSegments);
+        } else {
+            // For other segment counts, distribute evenly
+            const range = distanceRange.max - distanceRange.min;
+            const segmentSize = range / segmentCount;
+
+            const newSegments = Array.from({ length: segmentCount }, (_, i) => ({
+                id: i,
+                min: Math.round((distanceRange.min + i * segmentSize) * 10) / 10,
+                max: Math.round((distanceRange.min + (i + 1) * segmentSize) * 10) / 10
+            }));
+
+            // Ensure the last segment includes the max value exactly
+            if (newSegments.length > 0) {
+                newSegments[newSegments.length - 1].max = distanceRange.max;
+            }
+
+            setSegments(newSegments);
         }
-
-        setSegments(newSegments);
     }, [segmentCount, distanceRange]);
 
     // Handle segment boundary changes
@@ -115,8 +145,11 @@ const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
         const adviceBySegment = segments.map(segment => {
             const segmentAdvice = {};
 
+            // Use filtered data if provided, otherwise use all intersections
+            const dataToUse = filteredData || intersections;
+
             // Iterate through all intersections, passes, and metrics
-            Object.values(intersections).forEach(intersection => {
+            Object.values(dataToUse).forEach(intersection => {
                 (intersection.passThroughs || []).forEach(pass => {
                     Object.values(pass.signalGroups || {}).forEach(sg => {
                         (sg.metrics || []).forEach(metric => {
@@ -144,7 +177,7 @@ const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
         });
 
         return adviceBySegment;
-    }, [intersections, segments]);
+    }, [intersections, segments, filteredData]);
 
     // Get all unique advice types across all segments
     const allAdviceTypes = useMemo(() => {
@@ -173,23 +206,18 @@ const DistanceSegmentedGlosaAnalysis = ({ intersections }) => {
         return [...segmentedData].sort((a, b) => a.min - b.min);
     }, [segmentedData]);
 
-    // Function to reset segments to evenly distributed
+    // Function to reset segments to our default segmentation
     const resetSegments = () => {
-        const range = distanceRange.max - distanceRange.min;
-        const segmentSize = range / segmentCount;
-
-        const newSegments = Array.from({ length: segmentCount }, (_, i) => ({
-            id: i,
-            min: Math.round((distanceRange.min + i * segmentSize) * 10) / 10,
-            max: Math.round((distanceRange.min + (i + 1) * segmentSize) * 10) / 10
-        }));
-
-        // Ensure the last segment includes the max value exactly
-        if (newSegments.length > 0) {
-            newSegments[newSegments.length - 1].max = distanceRange.max;
-        }
-
-        setSegments(newSegments);
+        const defaultSegments = [
+            { id: 0, min: 0, max: 20 },
+            { id: 1, min: 20, max: 50 },
+            { id: 2, min: 50, max: 100 },
+            { id: 3, min: 100, max: 150 },
+            { id: 4, min: 150, max: Math.max(distanceRange.max, 200) }
+        ];
+        setSegmentCount(5);
+        setTempSegmentCount(5);
+        setSegments(defaultSegments);
     };
 
     // Create stacked bar chart configuration
