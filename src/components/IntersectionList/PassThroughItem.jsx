@@ -62,7 +62,12 @@ const getIngressColor = (ingress) => {
     return colors[ingress] || '#9ca3af'; // default gray
 };
 
-const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
+const PassThroughItem = ({
+                             passThrough,
+                             isSelected,
+                             onSelect,
+                             isFilteredOut = false
+                         }) => {
     // Default values for safety
     const summary = passThrough.summary || {
         anySignalGroupHasMovementEvents: false,
@@ -108,14 +113,15 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                 borderBottomStyle: 'solid',
                 borderBottomColor: '#f3f4f6',
                 cursor: 'pointer',
-                backgroundColor: isSelected ? '#eff6ff' : 'white',
+                backgroundColor: isSelected ? '#eff6ff' : isFilteredOut ? '#fef2f2' : 'white',
                 borderLeftWidth: '4px',
                 borderLeftStyle: 'solid',
                 borderLeftColor: isSelected ? '#3b82f6' : 'transparent',
                 transition: 'background-color 0.2s ease, border-left-color 0.2s ease',
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                opacity: isFilteredOut ? 0.8 : 1
             }}
             onClick={onSelect}
             role="button"
@@ -124,17 +130,17 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
         >
             {/* Left Part: Time and ID */}
             <div>
-                <div style={{ fontWeight: isSelected ? '600' : '500', color: '#1f2937' }}>
+                <div style={{ fontWeight: isSelected ? '600' : '500', color: isFilteredOut ? '#991b1b' : '#1f2937' }}>
                     {time}
                 </div>
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }} title={uuid}>
+                <div style={{ fontSize: '12px', color: isFilteredOut ? '#ef4444' : '#6b7280', marginTop: '4px' }} title={uuid}>
                     ID: {uuid.substring(0, 8)}...
                 </div>
             </div>
 
             {/* Right Part: SG Count, Ingress Badge and Indicators */}
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{ fontSize: '12px', color: '#4b5563', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#4b5563', backgroundColor: isFilteredOut ? '#fee2e2' : '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
                     {signalGroupCount} SG{signalGroupCount !== 1 ? 's' : ''}
                 </div>
 
@@ -146,7 +152,8 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                         backgroundColor: ingressColor,
                         padding: '2px 8px',
                         borderRadius: '12px',
-                        fontWeight: '500'
+                        fontWeight: '500',
+                        opacity: isFilteredOut ? 0.7 : 1
                     }}>
                         I:{ingressID}
                     </div>
@@ -173,6 +180,7 @@ const PassThroughItem = ({ passThrough, isSelected, onSelect }) => {
                     borderWidth: '1px',
                     borderStyle: 'solid',
                     borderColor: 'rgba(0,0,0,0.1)',
+                    opacity: isFilteredOut ? 0.7 : 1
                 }}></div>
             </div>
         </div>

@@ -48,7 +48,16 @@ const SortButton = ({ label, currentField, currentDirection, field, onClick }) =
     );
 };
 
-const IntersectionList = ({ intersections, selectedPassIndex, onSelectPassThrough }) => {
+const IntersectionList = ({
+                              intersections,
+                              filteredData = {},
+                              filteredPassIndices = new Set(),
+                              showFilteredOutItems = false,
+                              setShowFilteredOutItems,
+                              filtersActive = false,
+                              selectedPassIndex,
+                              onSelectPassThrough
+                          }) => {
     // State for sorting
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
@@ -65,11 +74,14 @@ const IntersectionList = ({ intersections, selectedPassIndex, onSelectPassThroug
         }
     };
 
-    // Get sorted intersection IDs
-    const getSortedIntersectionIds = () => {
-        const intersectionIds = Object.keys(intersections);
+    // Determine which intersections are filtered in and out
+    const filteredIntersectionIds = Object.keys(filteredData);
+    const filteredOutIntersectionIds = Object.keys(intersections)
+        .filter(id => !filteredIntersectionIds.includes(id));
 
-        return intersectionIds.sort((a, b) => {
+    // Sort the intersection IDs based on current sort settings
+    const getSortedIntersectionIds = (ids) => {
+        return [...ids].sort((a, b) => {
             const intA = intersections[a];
             const intB = intersections[b];
 
@@ -86,9 +98,17 @@ const IntersectionList = ({ intersections, selectedPassIndex, onSelectPassThroug
         });
     };
 
-    const sortedIntersectionIds = getSortedIntersectionIds();
+    const sortedFilteredIds = getSortedIntersectionIds(filteredIntersectionIds);
+    const sortedFilteredOutIds = getSortedIntersectionIds(filteredOutIntersectionIds);
 
-    if (sortedIntersectionIds.length === 0) {
+    // Handle toggle for filtered-out items
+    const toggleFilteredOutItems = () => {
+        if (setShowFilteredOutItems) {
+            setShowFilteredOutItems(!showFilteredOutItems);
+        }
+    };
+
+    if (Object.keys(intersections).length === 0) {
         return (
             <div style={{ padding: '16px', textAlign: 'center', color: '#6b7280' }}>
                 No intersection data loaded.
@@ -102,7 +122,7 @@ const IntersectionList = ({ intersections, selectedPassIndex, onSelectPassThroug
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Intersections & Passes</span>
                     <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal' }}>
-                        {sortedIntersectionIds.length} {sortedIntersectionIds.length === 1 ? 'intersection' : 'intersections'}
+                        {Object.keys(intersections).length} {Object.keys(intersections).length === 1 ? 'intersection' : 'intersections'}
                     </span>
                 </div>
 
@@ -127,14 +147,113 @@ const IntersectionList = ({ intersections, selectedPassIndex, onSelectPassThroug
             </div>
 
             <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', flexGrow: 1 }}>
-                {sortedIntersectionIds.map(id => (
-                    <IntersectionItem
-                        key={id}
-                        intersection={intersections[id]}
-                        selectedPassIndex={selectedPassIndex}
-                        onSelectPassThrough={onSelectPassThrough}
-                    />
-                ))}
+                {/* Filtered Intersections Group */}
+                {sortedFilteredIds.length > 0 && (
+                    <div>
+                        {filtersActive && (
+                            <div style={{
+                                padding: '12px 16px',
+                                backgroundColor: '#f0f9ff',
+                                borderBottomWidth: '1px',
+                                borderBottomStyle: 'solid',
+                                borderBottomColor: '#e5e7eb',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div style={{ fontWeight: '600', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                                        <path fillRule="evenodd" d="M2.5 3A1.5 1.5 0 001 4.5v4A1.5 1.5 0 002.5 10h6A1.5 1.5 0 0010 8.5v-4A1.5 1.5 0 008.5 3h-6zm11 2A1.5 1.5 0 0012 6.5v7a1.5 1.5 0 001.5 1.5h6a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0019.5 5h-6zm-11 7A1.5 1.5 0 001 13.5v2A1.5 1.5 0 002.5 17h6A1.5 1.5 0 0010 15.5v-2A1.5 1.5 0 008.5 12h-6z" clipRule="evenodd" />
+                                    </svg>
+                                    Matching Filter
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: '500', backgroundColor: '#e0f2fe', padding: '3px 8px', borderRadius: '12px' }}>
+                                    {sortedFilteredIds.length} {sortedFilteredIds.length === 1 ? 'intersection' : 'intersections'}
+                                </div>
+                            </div>
+                        )}
+
+                        {sortedFilteredIds.map(id => (
+                            <IntersectionItem
+                                key={id}
+                                intersection={intersections[id]}
+                                filteredPassIndices={filteredPassIndices}
+                                selectedPassIndex={selectedPassIndex}
+                                onSelectPassThrough={onSelectPassThrough}
+                                filtersActive={filtersActive}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Filtered Out Intersections Group */}
+                {filtersActive && sortedFilteredOutIds.length > 0 && (
+                    <div>
+                        <div
+                            style={{
+                                padding: '12px 16px',
+                                backgroundColor: '#fff1f2',
+                                borderBottomWidth: '1px',
+                                borderBottomStyle: 'solid',
+                                borderBottomColor: '#e5e7eb',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                cursor: 'pointer'
+                            }}
+                            onClick={toggleFilteredOutItems}
+                        >
+                            <div style={{ fontWeight: '600', color: '#be123c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                                    <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z" clipRule="evenodd" />
+                                </svg>
+                                Not Matching Filter
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px', marginLeft: '4px', transform: showFilteredOutItems ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#be123c', fontWeight: '500', backgroundColor: '#ffe4e6', padding: '3px 8px', borderRadius: '12px' }}>
+                                {sortedFilteredOutIds.length} {sortedFilteredOutIds.length === 1 ? 'intersection' : 'intersections'}
+                            </div>
+                        </div>
+
+                        {showFilteredOutItems && sortedFilteredOutIds.map(id => (
+                            <IntersectionItem
+                                key={id}
+                                intersection={intersections[id]}
+                                filteredPassIndices={filteredPassIndices}
+                                selectedPassIndex={selectedPassIndex}
+                                onSelectPassThrough={onSelectPassThrough}
+                                isFilteredOut={true}
+                                filtersActive={filtersActive}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Show empty state if no intersections match filters */}
+                {filtersActive && sortedFilteredIds.length === 0 && (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', color: '#6b7280' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '40px', height: '40px', color: '#d1d5db', margin: '0 auto 16px' }}>
+                            <path fillRule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clipRule="evenodd" />
+                        </svg>
+                        <p>No intersections match the current filter criteria.</p>
+                        <p>Try adjusting your filters or <button
+                            onClick={toggleFilteredOutItems}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#3b82f6',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                padding: '0',
+                                textDecoration: 'underline'
+                            }}
+                        >
+                            view filtered-out intersections
+                        </button>.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
