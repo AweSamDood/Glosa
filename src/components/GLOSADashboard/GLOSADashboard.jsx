@@ -265,7 +265,6 @@ const GLOSADashboard = () => {
                                 {activeTab === 'general' && <GeneralOverviewTab
                                     intersections={intersections}
                                     filteredData={filteredData}
-                                    filterSettings={filterSettings}
                                 />}
                                 {activeTab === 'intersection' && <IntersectionTab
                                     intersection={selectedIntersection}

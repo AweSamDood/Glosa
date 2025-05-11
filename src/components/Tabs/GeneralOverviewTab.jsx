@@ -4,23 +4,12 @@ import {
     XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer
 } from 'recharts';
-import FilterableGlosaAdviceDistribution from '../GLOSA/FilterableGlosaAdviceDistribution';
-import DistanceSegmentedGlosaAnalysis from '../GLOSA/DistanceSegmentedGlosaAnalysis';
-import GlobalFilteringSection from '../Filtering/GlobalFilteringSection';
+import SimplifiedGlosaAdviceDistribution from '../GLOSA/SimplifiedGlosaAdviceDistribution';
+import SimplifiedDistanceSegmentedGlosaAnalysis from '../GLOSA/SimplifiedDistanceSegmentedGlosaAnalysis';
 
-const GeneralOverviewTab = ({ intersections }) => {
-    // State for the filtered data used in Advanced Analysis
-    const [filteredData, setFilteredData] = useState(intersections);
-    const [activeFilters, setActiveFilters] = useState(null);
-
+const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
     // Toggle for Advanced Analysis section
     const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
-
-    // Handle filter changes from GlobalFilteringSection
-    const handleFilterChange = (newFilteredData, filters) => {
-        setFilteredData(newFilteredData);
-        setActiveFilters(filters);
-    };
 
     // Compute aggregated statistics for the overview
     const stats = useMemo(() => {
@@ -252,6 +241,10 @@ const GeneralOverviewTab = ({ intersections }) => {
         setShowAdvancedAnalysis(prev => !prev);
     };
 
+    // Determine which data source to use for the advanced analysis
+    // Use filtered data if there are filters applied, otherwise use all intersections
+    const dataToUse = Object.keys(filteredData).length > 0 ? filteredData : intersections;
+
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '24px' }}>
@@ -322,14 +315,8 @@ const GeneralOverviewTab = ({ intersections }) => {
 
                 {showAdvancedAnalysis && (
                     <>
-                        {/* Global Filtering Section */}
-                        <GlobalFilteringSection
-                            intersections={intersections}
-                            onFilterChange={handleFilterChange}
-                        />
-
-                        {/* Filtered Data Info */}
-                        {activeFilters && (
+                        {/* Data Source Info */}
+                        {Object.keys(filteredData).length > 0 && Object.keys(filteredData).length < Object.keys(intersections).length && (
                             <div style={{
                                 backgroundColor: '#f0f9ff',
                                 borderRadius: '8px',
@@ -340,13 +327,10 @@ const GeneralOverviewTab = ({ intersections }) => {
                                 alignItems: 'center'
                             }}>
                                 <div>
-                                    <span style={{ fontWeight: '500' }}>Filtered Data:</span> {Object.keys(filteredData).length} intersections with {
+                                    <span style={{ fontWeight: '500' }}>Analysis using filtered data:</span> {Object.keys(filteredData).length} intersections with {
                                     Object.values(filteredData).reduce((sum, int) => sum + int.passThroughs.length, 0)
                                 } pass-throughs
                                 </div>
-                                {Object.keys(filteredData).length === 0 && (
-                                    <span style={{ color: '#dc2626', fontWeight: '500' }}>No data matches current filters</span>
-                                )}
                             </div>
                         )}
 
@@ -354,27 +338,28 @@ const GeneralOverviewTab = ({ intersections }) => {
                         <div style={{ marginBottom: '32px' }}>
                             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
 
-                            {/* First GLOSA Distribution with Filters */}
-                            <FilterableGlosaAdviceDistribution
-                                intersections={filteredData}
+                            {/* First GLOSA Distribution */}
+                            <SimplifiedGlosaAdviceDistribution
+                                intersections={dataToUse}
                                 instanceId={1}
                             />
 
-                            {/* Second GLOSA Distribution with Filters */}
-                            <FilterableGlosaAdviceDistribution
-                                intersections={filteredData}
+                            {/* Second GLOSA Distribution (optional) */}
+                            <SimplifiedGlosaAdviceDistribution
+                                intersections={dataToUse}
                                 instanceId={2}
                             />
 
-                            {/* New Distance-Segmented Analysis */}
-                            <DistanceSegmentedGlosaAnalysis
-                                intersections={filteredData}
+                            {/* Distance-Segmented Analysis */}
+                            <SimplifiedDistanceSegmentedGlosaAnalysis
+                                intersections={dataToUse}
                             />
                         </div>
                     </>
                 )}
             </div>
 
+            {/* Rest of the component (unchanged) */}
             {/* Intersection Stability */}
             {stabilityChartData.length > 0 && (
                 <div style={{ marginBottom: '32px' }}>
