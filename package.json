@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:dataset1": "vite --port 3000 --mode dataset1",
-    "dev:dataset2": "vite --port 3001 --mode dataset2",
+    "dev:dataset1": "cross-env VITE_INSTANCE_NAME=dataset1 vite --port 3000 --mode dataset1",
+    "dev:dataset2": "cross-env VITE_INSTANCE_NAME=dataset2 vite --port 3001 --mode dataset2",
+    "dev:with-server": "concurrently \"npm run dev\" \"npm run server\"",
+    "dev:dataset1-with-server": "concurrently \"npm run dev:dataset1\" \"npm run server\"",
+    "server": "cd server && npm run dev",
     "build": "vite build",
-    "build:dataset1": "vite build --mode dataset1",
-    "build:dataset2": "vite build --mode dataset2",
+    "build:dataset1": "cross-env VITE_INSTANCE_NAME=dataset1 vite build --mode dataset1",
+    "build:dataset2": "cross-env VITE_INSTANCE_NAME=dataset2 vite build --mode dataset2",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,7 +20,9 @@
     "leaflet": "^1.9.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

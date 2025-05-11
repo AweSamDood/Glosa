@@ -12,7 +12,8 @@ import IntersectionTab from '../Tabs/IntersectionTab';
 import GeneralOverviewTab from '../Tabs/GeneralOverviewTab';
 import SavedPassesPanel from '../SavedPasses/SavedPassesPanel';
 import GlobalFilteringSection from '../Filtering/GlobalFilteringSection';
-import SavedPassesService from '../../services/SavedPassesService';
+import SavedPassesService from '../../services/FileBasedSavedPassesService';
+
 
 const GLOSADashboard = () => {
     const { intersections, loading, error } = useGlosaData();
@@ -31,11 +32,24 @@ const GLOSADashboard = () => {
     const [savedPasses, setSavedPasses] = useState([]);
     const [showSavedPasses, setShowSavedPasses] = useState(true);
 
-    // Load saved passes from localStorage on mount
+    // Load saved passes from file on mount
     useEffect(() => {
-        const loadSavedPasses = () => {
-            const saved = SavedPassesService.getSavedPasses();
-            setSavedPasses(saved);
+        const loadSavedPasses = async () => {
+            try {
+                setLoadingSavedPasses(true);
+                setSavedPassesError(null);
+
+                const saved = await SavedPassesService.getSavedPasses();
+                setSavedPasses(saved);
+            } catch (error) {
+                console.error('Error loading saved passes:', error);
+                setSavedPassesError('Failed to load saved passes. Using local storage as fallback.');
+                // Try to load from localStorage as fallback
+                const localSaved = SavedPassesService.getLocalStorageSavedPasses();
+                setSavedPasses(localSaved);
+            } finally {
+                setLoadingSavedPasses(false);
+            }
         };
 
         loadSavedPasses();
@@ -80,15 +94,21 @@ const GLOSADashboard = () => {
     };
 
     // Save a pass
-    const handleSavePass = (passData) => {
-        const savedPass = SavedPassesService.savePass(passData);
-        if (savedPass) {
-            setSavedPasses(prev => [...prev, savedPass]);
+    const handleSavePass = async (passData) => {
+        try {
+            const savedPass = await SavedPassesService.savePass(passData);
+            if (savedPass) {
+                setSavedPasses(prev => [...prev, savedPass]);
+            }
+        } catch (error) {
+            console.error('Error saving pass:', error);
+            // Show error to user
+            alert('Failed to save pass. Please try again.');
         }
     };
 
     // Unsave a pass
-    const handleUnsavePass = (passId) => {
+    const handleUnsavePass = async (passId) => {
         // If passId is a number, it's a passIndex; if it's a string, it's a saved pass ID
         const isPassIndex = typeof passId === 'number';
 
@@ -102,19 +122,29 @@ const GLOSADashboard = () => {
             }
         }
 
-        const removed = SavedPassesService.removeSavedPass(passId);
-        if (removed) {
-            setSavedPasses(prev => prev.filter(p => p.id !== passId));
+        try {
+            const removed = await SavedPassesService.removeSavedPass(passId);
+            if (removed) {
+                setSavedPasses(prev => prev.filter(p => p.id !== passId));
+            }
+        } catch (error) {
+            console.error('Error removing saved pass:', error);
+            alert('Failed to remove saved pass. Please try again.');
         }
     };
 
     // Update a pass note
-    const handleUpdateNote = (passId, note) => {
-        const updated = SavedPassesService.updatePassNote(passId, note);
-        if (updated) {
-            setSavedPasses(prev =>
-                prev.map(p => p.id === passId ? { ...p, note } : p)
-            );
+    const handleUpdateNote = async (passId, note) => {
+        try {
+            const updated = await SavedPassesService.updatePassNote(passId, note);
+            if (updated) {
+                setSavedPasses(prev =>
+                    prev.map(p => p.id === passId ? { ...p, note } : p)
+                );
+            }
+        } catch (error) {
+            console.error('Error updating pass note:', error);
+            alert('Failed to update note. Please try again.');
         }
     };
 
@@ -390,8 +420,44 @@ const GLOSADashboard = () => {
                             )}
                         </div>
 
-                        {/* Saved Passes Panel - shown conditionally */}
-                        {showSavedPasses && (
+                        {showSavedPasses && loadingSavedPasses && (
+                            <div style={{
+                                width: '300px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderLeft: '1px solid #d1d5db'
+                            }}>
+                                <div style={{ textAlign: 'center', padding: '20px' }}>
+                                    <div style={{
+                                        borderRadius: '50%',
+                                        width: '24px',
+                                        height: '24px',
+                                        border: '3px solid #f3f4f6',
+                                        borderTop: '3px solid #3b82f6',
+                                        animation: 'spin 1s linear infinite',
+                                        margin: '0 auto 12px'
+                                    }}></div>
+                                    <p>Loading saved passes...</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Show error message if there was an error loading saved passes */}
+                        {showSavedPasses && savedPassesError && (
+                            <div style={{
+                                width: '300px',
+                                borderLeft: '1px solid #d1d5db',
+                                padding: '16px',
+                                backgroundColor: '#fee2e2',
+                                color: '#b91c1c'
+                            }}>
+                                <p>{savedPassesError}</p>
+                            </div>
+                        )}
+
+                        {/* Regular saved passes panel */}
+                        {showSavedPasses && !loadingSavedPasses && !savedPassesError && (
                             <SavedPassesPanel
                                 savedPasses={savedPasses}
                                 onSelectPass={handleSelectPassThrough}
