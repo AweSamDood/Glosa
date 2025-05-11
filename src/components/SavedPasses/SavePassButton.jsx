@@ -1,4 +1,4 @@
-// src/components/SavedPasses/SavePassButton.jsx
+// src/components/SavedPasses/SavePassButton.jsx - Improved version
 import React from 'react';
 
 const SavePassButton = ({ passThrough, isSaved, onSavePass, onUnsavePass }) => {
@@ -9,7 +9,47 @@ const SavePassButton = ({ passThrough, isSaved, onSavePass, onUnsavePass }) => {
         if (isSaved) {
             onUnsavePass(passThrough.passIndex);
         } else {
-            // Prepare pass data for saving
+            // Extract signal group information
+            const signalGroups = [];
+            if (passThrough.signalGroups) {
+                // Get predicted signal groups if available
+                const predictedSgNames = new Set(
+                    (passThrough.summary?.predictedSignalGroupsUsed || [])
+                        .map(prediction => prediction.signalGroup)
+                );
+
+                // Extract data from each signal group
+                Object.entries(passThrough.signalGroups).forEach(([sgName, sgData]) => {
+                    signalGroups.push({
+                        name: sgName,
+                        predicted: predictedSgNames.has(sgName),
+                        hasMovementEvents: sgData.hasMovementEvents || false,
+                        allMovementEventsUnavailable: sgData.allMovementEventsUnavailable || false
+                    });
+                });
+            }
+
+            // Extract intersection name from the parent object
+            const intersectionName = passThrough.intersectionName || 'Unknown Intersection';
+
+            // Extract ingress information
+            let ingress;
+            if (passThrough.signalGroups) {
+                // Try to find ingress information in the first signal group's metrics
+                for (const sgName in passThrough.signalGroups) {
+                    const sg = passThrough.signalGroups[sgName];
+                    if (sg.metrics && sg.metrics.length > 0) {
+                        const firstEvent = sg.metrics[0];
+                        if (firstEvent && firstEvent._rawEvent &&
+                            firstEvent._rawEvent.intersectionPass?.intPassInfo?.ingress !== undefined) {
+                            ingress = firstEvent._rawEvent.intersectionPass.intPassInfo.ingress;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Prepare pass data for saving with additional information
             const saveData = {
                 passIndex: passThrough.passIndex,
                 uuid: passThrough.uuid || 'unknown-uuid',
@@ -20,7 +60,14 @@ const SavePassButton = ({ passThrough, isSaved, onSavePass, onUnsavePass }) => {
                 }) : 'Unknown time',
                 note: '',
                 savedAt: new Date().toISOString(),
-                intersectionName: passThrough.intersectionName || 'Unknown Intersection'
+                intersectionName: intersectionName,
+                signalGroups: signalGroups,
+                hasMovementEvents: passThrough.summary?.anySignalGroupHasMovementEvents || false,
+                allMovementEventsUnavailable: passThrough.summary?.allMovementEventsUnavailable || false,
+                greenIntervalChanged: passThrough.summary?.significantGreenIntervalChangeOccurred || false,
+                possibleGPSMismatch: passThrough.summary?.possibleGPSMismatch || false,
+                hasNoGreenWarning: passThrough.summary?.hasNoPredictedGreensWithAvailableEvents || false,
+                ingress: ingress
             };
 
             onSavePass(saveData);
