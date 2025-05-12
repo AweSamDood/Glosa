@@ -20,7 +20,7 @@ const GlosaMissedOpportunitiesAnalysis = ({ intersections }) => {
     const [visualizationType, setVisualizationType] = useState('missed-opportunities');
 
     // Configurable parameters with defaults - shared with GlosaAdviceReliabilityAnalysis
-    const [intervalSize, setIntervalSize] = useState(20); // Default 20m intervals
+    const [intervalSize, setIntervalSize] = useState(5); // Default 20m intervals
     const [tolerance, setTolerance] = useState(2); // Default ±2s tolerance
     const [xAxisInterval, setXAxisInterval] = useState(1); // Show every nth label
 

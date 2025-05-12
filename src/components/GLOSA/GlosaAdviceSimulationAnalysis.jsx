@@ -17,9 +17,9 @@ const GlosaAdviceSimulationAnalysis = ({ intersections }) => {
     const [visualizationType, setVisualizationType] = useState('success-rate');
 
     // Configurable parameters with defaults
-    const [intervalSize, setIntervalSize] = useState(20); // Default 20m intervals
+    const [intervalSize, setIntervalSize] = useState(5); // Default 20m intervals
     const [tolerance, setTolerance] = useState(2); // Default ±2s tolerance
-    const [xAxisInterval, setXAxisInterval] = useState(1); // Show every nth label
+    const [xAxisInterval, setXAxisInterval] = useState(4); // Show every nth label
 
     // New states for min and max distance
     const [minDistance, setMinDistance] = useState(20); // Default 20m min

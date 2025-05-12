@@ -1,4 +1,4 @@
-// src/utils/dataProcessing.js
+// src/utils/dataProcessing.js - Updated for green interval change magnitude tracking
 
 export const countOccurrences = (arr) => {
     const counts = {};
@@ -95,6 +95,7 @@ function checkGreenIntervalStability(datapoint1Events, datapoint2Events) {
     return {isStable: false, reason: "pattern_mismatch"};
 }
 
+// Updated to store green change magnitudes
 export const calculateSignalGroupSummary = (metrics) => {
     // Skip if no metrics
     if (!metrics || metrics.length === 0) {
@@ -104,10 +105,16 @@ export const calculateSignalGroupSummary = (metrics) => {
             glosaAdvice: {},
             clearanceTypes: {},
             greenIntervalChangesDetected: 0,
-            // Add new fields for change types
+            // Add new fields for change types and magnitudes
             greenChangeTypes: {
                 lostGreen: 0,
                 gotGreen: 0
+            },
+            greenChangeMagnitudes: {
+                earlierGreenStart: [],
+                extendedGreenEnd: [],
+                laterGreenStart: [],
+                shortenedGreenEnd: []
             }
         };
     }
@@ -120,10 +127,24 @@ export const calculateSignalGroupSummary = (metrics) => {
         shortenedGreenEnd: 0  // Negative: Green ends earlier
     };
 
-    // Count changes by type
+    // Track the magnitudes of changes for histogram
+    const greenChangeMagnitudes = {
+        earlierGreenStart: [],
+        extendedGreenEnd: [],
+        laterGreenStart: [],
+        shortenedGreenEnd: []
+    };
+
+    // Count changes by type and collect magnitudes
     metrics.filter(m => m.greenIntervalChanged).forEach(m => {
         if (m.greenChangeType && greenChangeTypes[m.greenChangeType] !== undefined) {
             greenChangeTypes[m.greenChangeType]++;
+
+            // Store the change magnitude if available
+            if (m.greenChangeMagnitude !== undefined &&
+                greenChangeMagnitudes[m.greenChangeType]) {
+                greenChangeMagnitudes[m.greenChangeType].push(m.greenChangeMagnitude);
+            }
         }
     });
 
@@ -142,13 +163,15 @@ export const calculateSignalGroupSummary = (metrics) => {
         // Count how many metrics detected a change from the previous one
         greenIntervalChangesDetected: metrics.filter(m => m.greenIntervalChanged).length,
         // Add the green change types to the summary
-        greenChangeTypes: greenChangeTypes
+        greenChangeTypes: greenChangeTypes,
+        // Add the magnitudes of changes
+        greenChangeMagnitudes: greenChangeMagnitudes
     };
 
     return summary;
 };
 
-// --- Updated processPassThrough with Enhanced Green Interval Change Detection ---
+// --- Updated processPassThrough with Enhanced Green Interval Change Detection and Magnitude Tracking ---
 export const processPassThrough = (events, passIndex) => {
     const uuid = events[0]?.uuid || `pass-${passIndex}`;
     const firstTimestamp = events[0]?.dt ? new Date(events[0].dt) : new Date();
@@ -166,6 +189,14 @@ export const processPassThrough = (events, passIndex) => {
         extendedGreenEnd: 0,
         laterGreenStart: 0,
         shortenedGreenEnd: 0
+    };
+
+    // Track magnitudes of changes for histogram
+    const greenChangeMagnitudes = {
+        earlierGreenStart: [],
+        extendedGreenEnd: [],
+        laterGreenStart: [],
+        shortenedGreenEnd: []
     };
 
     // Sort events by timestamp to ensure sequential processing
@@ -194,6 +225,13 @@ export const processPassThrough = (events, passIndex) => {
                         extendedGreenEnd: 0,
                         laterGreenStart: 0,
                         shortenedGreenEnd: 0
+                    },
+                    // Add tracking for green change magnitudes
+                    greenChangeMagnitudes: {
+                        earlierGreenStart: [],
+                        extendedGreenEnd: [],
+                        laterGreenStart: [],
+                        shortenedGreenEnd: []
                     }
                 };
             }
@@ -232,6 +270,7 @@ export const processPassThrough = (events, passIndex) => {
                 // Initialize change flag and type for this specific metric
                 greenIntervalChanged: false,
                 greenChangeType: null,
+                greenChangeMagnitude: null, // NEW: Add field to store the magnitude of change in seconds
                 // Store the raw event for reference
                 _rawEvent: event
             };
@@ -275,19 +314,26 @@ export const processPassThrough = (events, passIndex) => {
                 let startChanged = false;
                 let endChanged = false;
                 let changeType = null; // Track the specific type of change
+                let changeMagnitude = null; // NEW: Track the magnitude of change in seconds
 
                 // Check start time change
                 if (currentGreenStart === null && prevStart !== null) {
                     startChanged = true; // Green start disappeared
                     changeType = "shortenedGreenEnd"; // Consider this as shortening (more conservative)
+                    // A null start is treated as a significant change
+                    changeMagnitude = prevStart; // Magnitude is the previous start time
                 } else if (currentGreenStart !== null && prevStart === null) {
                     startChanged = true; // Green start appeared
                     changeType = "earlierGreenStart"; // Consider this as earlier start
+                    changeMagnitude = currentGreenStart; // Magnitude is the current start time
                 } else if (currentGreenStart !== null && prevStart !== null) {
-                    if (Math.abs(currentGreenStart - prevStart) > threshold) {
+                    const startDiff = Math.abs(currentGreenStart - prevStart);
+                    if (startDiff > threshold) {
                         startChanged = true;
                         // If new start is earlier (smaller), it's a positive change
                         changeType = currentGreenStart < prevStart ? "earlierGreenStart" : "laterGreenStart";
+                        // Store the absolute magnitude of the change in seconds
+                        changeMagnitude = startDiff;
                     }
                 }
 
@@ -295,18 +341,27 @@ export const processPassThrough = (events, passIndex) => {
                 if (currentGreenEnd === null && prevEnd !== null) {
                     endChanged = true; // Green end disappeared
                     // Only override if no start change was detected
-                    if (!changeType) changeType = "shortenedGreenEnd";
+                    if (!changeType) {
+                        changeType = "shortenedGreenEnd";
+                        changeMagnitude = prevEnd; // Magnitude is the previous end time
+                    }
                 } else if (currentGreenEnd !== null && prevEnd === null) {
                     endChanged = true; // Green end appeared
                     // Only override if no start change was detected
-                    if (!changeType) changeType = "extendedGreenEnd";
+                    if (!changeType) {
+                        changeType = "extendedGreenEnd";
+                        changeMagnitude = currentGreenEnd; // Magnitude is the current end time
+                    }
                 } else if (currentGreenEnd !== null && prevEnd !== null) {
-                    if (Math.abs(currentGreenEnd - prevEnd) > threshold) {
+                    const endDiff = Math.abs(currentGreenEnd - prevEnd);
+                    if (endDiff > threshold) {
                         endChanged = true;
                         // If no start change was detected, set the change type based on end time
                         if (!changeType) {
                             // If new end is later (bigger), it's a positive change
                             changeType = currentGreenEnd > prevEnd ? "extendedGreenEnd" : "shortenedGreenEnd";
+                            // Store the absolute magnitude of the change in seconds
+                            changeMagnitude = endDiff;
                         }
                         // If there was already a start change, we now have both start and end changing
                         // We don't override the existing type, as the start change takes precedence in our model
@@ -326,20 +381,33 @@ export const processPassThrough = (events, passIndex) => {
                         // the movement event pattern shows this is stable
                         metric.greenIntervalChanged = false;
                         metric.greenChangeType = null;
+                        metric.greenChangeMagnitude = null;
                         console.log(`Green interval change detected but stable: ${sgName} - ${stabilityCheck.reason}`);
                     } else {
                         // This is a genuine change
                         metric.greenIntervalChanged = true;
                         metric.greenChangeType = changeType;
+                        metric.greenChangeMagnitude = changeMagnitude; // Store the magnitude
                         significantGreenIntervalChangeOccurred = true;
 
                         // Update counts with the new categorization
                         if (changeType && signalGroupsData[sgName].greenChangeTypes) {
                             signalGroupsData[sgName].greenChangeTypes[changeType]++;
+
+                            // Store the magnitude for histogram
+                            if (changeMagnitude !== null &&
+                                signalGroupsData[sgName].greenChangeMagnitudes[changeType]) {
+                                signalGroupsData[sgName].greenChangeMagnitudes[changeType].push(changeMagnitude);
+                            }
                         }
 
                         if (changeType) {
                             greenChangeTypes[changeType]++;
+
+                            // Store the magnitude in the global tracking
+                            if (changeMagnitude !== null && greenChangeMagnitudes[changeType]) {
+                                greenChangeMagnitudes[changeType].push(changeMagnitude);
+                            }
                         }
                     }
                 }
@@ -378,6 +446,7 @@ export const processPassThrough = (events, passIndex) => {
                 movementEvents: [],
                 greenIntervalChanged: false, // Default for dummy metric
                 greenChangeType: null,
+                greenChangeMagnitude: null,
                 greenStartTime: null,
                 greenEndTime: null,
                 _rawEvent: sortedEvents[0]
@@ -389,6 +458,12 @@ export const processPassThrough = (events, passIndex) => {
                 extendedGreenEnd: 0,
                 laterGreenStart: 0,
                 shortenedGreenEnd: 0
+            },
+            greenChangeMagnitudes: {
+                earlierGreenStart: [],
+                extendedGreenEnd: [],
+                laterGreenStart: [],
+                shortenedGreenEnd: []
             }
         };
     }
@@ -478,7 +553,7 @@ export const processPassThrough = (events, passIndex) => {
     // New flag to indicate possible GPS mismatch
     const possibleGPSMismatch = hasNoPredictedGreensWithAvailableEvents && foundGreenInPreviousEvents;
 
-    // Update the summary object with new green change type information
+    // Update the summary object with new green change type information and magnitudes
     const summary = {
         eventCount: sortedEvents.length,
         timeRange: {
@@ -491,6 +566,7 @@ export const processPassThrough = (events, passIndex) => {
         ),
         significantGreenIntervalChangeOccurred: significantGreenIntervalChangeOccurred,
         greenChangeTypes: greenChangeTypes, // Add the green change types
+        greenChangeMagnitudes: greenChangeMagnitudes, // Add the magnitudes of changes
         predictedSignalGroupsUsed: predictedSignalGroupsUsed,
         hasNoPredictedGreensWithAvailableEvents: hasNoPredictedGreensWithAvailableEvents,
         // Add new flags
@@ -510,9 +586,10 @@ export const processPassThrough = (events, passIndex) => {
         uuid,
         timestamp: firstTimestamp,
         signalGroups: finalSignalGroups,
-        summary // Contains the new green change type information
+        summary // Contains the new green change type information and magnitudes
     };
 };
+
 export const calculateIntersectionSummary = (intersection) => {
     if (!intersection || !intersection.passThroughs || intersection.passThroughs.length === 0) {
         return {
@@ -535,6 +612,13 @@ export const calculateIntersectionSummary = (intersection) => {
                 extendedGreenEnd: 0,
                 laterGreenStart: 0,
                 shortenedGreenEnd: 0
+            },
+            // Add green change magnitudes for histograms
+            greenChangeMagnitudes: {
+                earlierGreenStart: [],
+                extendedGreenEnd: [],
+                laterGreenStart: [],
+                shortenedGreenEnd: []
             }
         };
     }
@@ -558,6 +642,13 @@ export const calculateIntersectionSummary = (intersection) => {
             laterGreenStart: 0,
             shortenedGreenEnd: 0
         },
+        // Add change magnitudes for histograms
+        greenChangeMagnitudes: {
+            earlierGreenStart: [],
+            extendedGreenEnd: [],
+            laterGreenStart: [],
+            shortenedGreenEnd: []
+        },
         // Add prediction statistics
         predictionStatistics: {
             predictedSignalGroups: {},
@@ -574,7 +665,7 @@ export const calculateIntersectionSummary = (intersection) => {
     const passThroughStops = new Map(); // Track stops per pass-through: Key: "passIndex-distanceBucket", Value: [{ signalGroups, timestamp }]
 
     passThroughs.forEach((passThrough, passIndex) => {
-        // Count green interval changes and track change types
+        // Count green interval changes and track change types and magnitudes
         if (passThrough.summary?.significantGreenIntervalChangeOccurred) {
             summary.greenIntervalChanges++;
 
@@ -584,6 +675,16 @@ export const calculateIntersectionSummary = (intersection) => {
                 summary.greenChangeTypes.extendedGreenEnd += passThrough.summary.greenChangeTypes.extendedGreenEnd || 0;
                 summary.greenChangeTypes.laterGreenStart += passThrough.summary.greenChangeTypes.laterGreenStart || 0;
                 summary.greenChangeTypes.shortenedGreenEnd += passThrough.summary.greenChangeTypes.shortenedGreenEnd || 0;
+            }
+
+            // Collect change magnitudes if available
+            if (passThrough.summary?.greenChangeMagnitudes) {
+                Object.entries(passThrough.summary.greenChangeMagnitudes).forEach(([changeType, magnitudes]) => {
+                    if (Array.isArray(magnitudes) && magnitudes.length > 0) {
+                        summary.greenChangeMagnitudes[changeType] =
+                            summary.greenChangeMagnitudes[changeType].concat(magnitudes);
+                    }
+                });
             }
         }
 
@@ -627,6 +728,13 @@ export const calculateIntersectionSummary = (intersection) => {
                     greenChangeTypes: {
                         lostGreen: 0,
                         gotGreen: 0
+                    },
+                    // Add change magnitudes for histograms
+                    greenChangeMagnitudes: {
+                        earlierGreenStart: [],
+                        extendedGreenEnd: [],
+                        laterGreenStart: [],
+                        shortenedGreenEnd: []
                     }
                 };
             }
@@ -657,13 +765,20 @@ export const calculateIntersectionSummary = (intersection) => {
                 sgAnalysis.speedRange.min = Math.min(sgAnalysis.speedRange.min, metric.speed);
                 sgAnalysis.speedRange.max = Math.max(sgAnalysis.speedRange.max, metric.speed);
 
-                // Count green interval changes and track change types
+                // Count green interval changes and track change types and magnitudes
                 if (metric.greenIntervalChanged) {
                     sgAnalysis.greenIntervalChanges++;
 
                     // Track change type
                     if (metric.greenChangeType && sgAnalysis.greenChangeTypes[metric.greenChangeType] !== undefined) {
                         sgAnalysis.greenChangeTypes[metric.greenChangeType]++;
+                    }
+
+                    // Store the magnitude for histograms
+                    if (metric.greenChangeMagnitude !== null &&
+                        metric.greenChangeType &&
+                        sgAnalysis.greenChangeMagnitudes[metric.greenChangeType]) {
+                        sgAnalysis.greenChangeMagnitudes[metric.greenChangeType].push(metric.greenChangeMagnitude);
                     }
                 }
 

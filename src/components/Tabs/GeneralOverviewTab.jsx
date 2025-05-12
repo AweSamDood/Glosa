@@ -8,6 +8,7 @@ import SimplifiedGlosaAdviceDistribution from '../GLOSA/SimplifiedGlosaAdviceDis
 import SimplifiedDistanceSegmentedGlosaAnalysis from '../GLOSA/SimplifiedDistanceSegmentedGlosaAnalysis';
 import GlosaAdviceSimulationAnalysis from '../GLOSA/GlosaAdviceSimulationAnalysis';
 import GlosaMissedOpportunitiesAnalysis from "../GLOSA/GlosaMissedOpportunitiesAnalysis.jsx";
+import GreenChangeHistogram from '../GLOSA/GreenChangeHistogram.jsx';
 
 
 const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
@@ -569,8 +570,8 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                                             padding: '4px 10px',
                                             borderRadius: '16px'
                                         }}>
-                                            Lost Green: {stats.greenChangeTypes.lostGreen}
-                                        </span>
+                                Lost Green: {stats.greenChangeTypes.lostGreen}
+                            </span>
                                     )}
                                     {stats.greenChangeTypes.gotGreen > 0 && (
                                         <span style={{
@@ -580,8 +581,8 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                                             padding: '4px 10px',
                                             borderRadius: '16px'
                                         }}>
-                                            Got Green: {stats.greenChangeTypes.gotGreen}
-                                        </span>
+                                Got Green: {stats.greenChangeTypes.gotGreen}
+                            </span>
                                     )}
                                 </div>
                             </div>
@@ -617,6 +618,13 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                         </div>
                     )}
                 </div>
+
+                {/* Add the new Green Change Histogram component here if there are changes */}
+                {stats.totalGreenIntervalChanges > 0 && stats.greenChangeMagnitudes && (
+                    <GreenChangeHistogram
+                        greenChangeMagnitudes={stats.greenChangeMagnitudes}
+                    />
+                )}
             </div>
 
             {/* Pass Status Distribution */}
