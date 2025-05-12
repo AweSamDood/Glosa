@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, {useMemo, useState} from 'react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -7,9 +7,10 @@ import {
 import SimplifiedGlosaAdviceDistribution from '../GLOSA/SimplifiedGlosaAdviceDistribution';
 import SimplifiedDistanceSegmentedGlosaAnalysis from '../GLOSA/SimplifiedDistanceSegmentedGlosaAnalysis';
 import GlosaAdviceSimulationAnalysis from '../GLOSA/GlosaAdviceSimulationAnalysis';
+import GlosaMissedOpportunitiesAnalysis from "../GLOSA/GlosaMissedOpportunitiesAnalysis.jsx";
 
 
-const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
+const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
     // Toggle for Advanced Analysis section
     const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
 
@@ -19,10 +20,10 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             return {
                 totalIntersections: 0,
                 totalPasses: 0,
-                timeRange: { start: null, end: null },
+                timeRange: {start: null, end: null},
                 passesByIntersection: [],
                 totalGreenIntervalChanges: 0,
-                greenChangeTypes: { lostGreen: 0, gotGreen: 0 },
+                greenChangeTypes: {lostGreen: 0, gotGreen: 0},
                 signalGroupStats: {
                     totalSignalGroups: 0,
                     glosaAdviceDistribution: {}
@@ -40,14 +41,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                 end: new Date(0) // Oldest possible date
             },
             totalGreenIntervalChanges: 0,
-            greenChangeTypes: { lostGreen: 0, gotGreen: 0 },
+            greenChangeTypes: {lostGreen: 0, gotGreen: 0},
             gpsIssueCount: 0,
             noGreenWarningCount: 0,
             withPredictionsCount: 0,
             signalGroupStats: {
                 totalSignalGroups: 0,
                 signalGroupNames: new Set(),
-                movementEventAvailability: { available: 0, unavailable: 0, none: 0 },
+                movementEventAvailability: {available: 0, unavailable: 0, none: 0},
                 glosaAdviceDistribution: {}
             },
             intersectionStability: []
@@ -189,10 +190,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
     // Prepare data for charts
     const passStatusData = useMemo(() => {
         return [
-            { name: 'With Predictions', value: stats.withPredictionsCount, color: '#10b981' }, // green
-            { name: 'GPS Issues', value: stats.gpsIssueCount, color: '#f59e0b' }, // yellow
-            { name: 'No Green', value: stats.noGreenWarningCount - stats.gpsIssueCount, color: '#dc2626' }, // red
-            { name: 'Other', value: stats.totalPasses - stats.withPredictionsCount - stats.noGreenWarningCount, color: '#9ca3af' } // gray
+            {name: 'With Predictions', value: stats.withPredictionsCount, color: '#10b981'}, // green
+            {name: 'GPS Issues', value: stats.gpsIssueCount, color: '#f59e0b'}, // yellow
+            {name: 'No Green', value: stats.noGreenWarningCount - stats.gpsIssueCount, color: '#dc2626'}, // red
+            {
+                name: 'Other',
+                value: stats.totalPasses - stats.withPredictionsCount - stats.noGreenWarningCount,
+                color: '#9ca3af'
+            } // gray
         ].filter(item => item.value > 0);
     }, [stats]);
 
@@ -201,16 +206,16 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
         const total = movAvail.available + movAvail.unavailable + movAvail.none;
 
         return [
-            { name: 'Available', value: movAvail.available, color: '#10b981' }, // green
-            { name: 'Unavailable', value: movAvail.unavailable, color: '#9ca3af' }, // gray
-            { name: 'None', value: movAvail.none, color: '#ef4444' } // red
+            {name: 'Available', value: movAvail.available, color: '#10b981'}, // green
+            {name: 'Unavailable', value: movAvail.unavailable, color: '#9ca3af'}, // gray
+            {name: 'None', value: movAvail.none, color: '#ef4444'} // red
         ].filter(item => item.value > 0);
     }, [stats]);
 
     const greenChangeData = useMemo(() => {
         return [
-            { name: 'Lost Green', value: stats.greenChangeTypes.lostGreen, color: '#ef4444' }, // red
-            { name: 'Got Green', value: stats.greenChangeTypes.gotGreen, color: '#10b981' } // green
+            {name: 'Lost Green', value: stats.greenChangeTypes.lostGreen, color: '#ef4444'}, // red
+            {name: 'Got Green', value: stats.greenChangeTypes.gotGreen, color: '#10b981'} // green
         ].filter(item => item.value > 0);
     }, [stats]);
 
@@ -248,36 +253,54 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
     const dataToUse = Object.keys(filteredData).length > 0 ? filteredData : intersections;
 
     return (
-        <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', padding: '24px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '24px' }}>
+        <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+            padding: '24px'
+        }}>
+            <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '24px'}}>
                 GLOSA Analysis Overview
             </h2>
 
             {/* Key Statistics */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Total Intersections</h3>
-                    <p style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{stats.totalIntersections}</p>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '16px',
+                marginBottom: '32px'
+            }}>
+                <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                    <h3 style={{fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px'}}>Total
+                        Intersections</h3>
+                    <p style={{fontSize: '24px', fontWeight: '600', color: '#111827'}}>{stats.totalIntersections}</p>
                 </div>
 
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Total Pass-Throughs</h3>
-                    <p style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{stats.totalPasses}</p>
+                <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                    <h3 style={{fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px'}}>Total
+                        Pass-Throughs</h3>
+                    <p style={{fontSize: '24px', fontWeight: '600', color: '#111827'}}>{stats.totalPasses}</p>
                 </div>
 
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Signal Groups</h3>
-                    <p style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{stats.signalGroupStats.totalSignalGroups}</p>
+                <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                    <h3 style={{fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px'}}>Signal
+                        Groups</h3>
+                    <p style={{
+                        fontSize: '24px',
+                        fontWeight: '600',
+                        color: '#111827'
+                    }}>{stats.signalGroupStats.totalSignalGroups}</p>
                 </div>
 
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Time Range</h3>
-                    <p style={{ fontSize: '14px', color: '#111827' }}>{formattedTimeRange}</p>
+                <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                    <h3 style={{fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px'}}>Time
+                        Range</h3>
+                    <p style={{fontSize: '14px', color: '#111827'}}>{formattedTimeRange}</p>
                 </div>
             </div>
 
             {/* Advanced Analysis Section */}
-            <div style={{ marginBottom: '32px' }}>
+            <div style={{marginBottom: '32px'}}>
                 <button
                     onClick={toggleAdvancedAnalysis}
                     style={{
@@ -311,7 +334,7 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                             transition: 'transform 0.2s ease'
                         }}
                     >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/>
                     </svg>
                 </button>
 
@@ -329,7 +352,9 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                 alignItems: 'center'
                             }}>
                                 <div>
-                                    <span style={{ fontWeight: '500' }}>Analysis using filtered data:</span> {Object.keys(filteredData).length} intersections with {
+                                    <span
+                                        style={{fontWeight: '500'}}>Analysis using filtered data:</span> {Object.keys(filteredData).length} intersections
+                                    with {
                                     Object.values(filteredData).reduce((sum, int) => sum + int.passThroughs.length, 0)
                                 } pass-throughs
                                 </div>
@@ -341,9 +366,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                             intersections={dataToUse}
                         />
 
+                        <GlosaMissedOpportunitiesAnalysis
+                            intersections={dataToUse}
+                        />
+
                         {/* Existing GLOSA Analysis Components */}
-                        <div style={{ marginBottom: '32px' }}>
-                            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>GLOSA Advice Analysis</h3>
+                        <div style={{marginBottom: '32px'}}>
+                            <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>GLOSA Advice
+                                Analysis</h3>
 
                             {/* First GLOSA Distribution */}
                             <SimplifiedGlosaAdviceDistribution
@@ -369,31 +399,33 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             {/* Rest of the component (unchanged) */}
             {/* Intersection Stability */}
             {stabilityChartData.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Intersection Stability (With Available Movement Events)</h3>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <p style={{ marginBottom: '16px', color: '#4b5563' }}>
-                            Stability is based on the frequency of green interval changes. Higher scores indicate more stable intersections.
+                <div style={{marginBottom: '32px'}}>
+                    <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Intersection Stability (With
+                        Available Movement Events)</h3>
+                    <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                        <p style={{marginBottom: '16px', color: '#4b5563'}}>
+                            Stability is based on the frequency of green interval changes. Higher scores indicate more
+                            stable intersections.
                             Only intersections with available movement events are shown.
                         </p>
-                        <div style={{ height: '400px' }}>
+                        <div style={{height: '400px'}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
                                     data={stabilityChartData}
-                                    margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                                    margin={{top: 20, right: 30, left: 20, bottom: 100}}
                                     layout="vertical"
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false}/>
                                     <XAxis
                                         type="number"
                                         domain={[0, 100]}
-                                        label={{ value: 'Stability Score (%)', position: 'insideBottom', offset: -5 }}
+                                        label={{value: 'Stability Score (%)', position: 'insideBottom', offset: -5}}
                                     />
                                     <YAxis
                                         dataKey="name"
                                         type="category"
                                         width={150}
-                                        tick={{ fontSize: 12 }}
+                                        tick={{fontSize: 12}}
                                     />
                                     <Tooltip
                                         formatter={(value, name, props) => {
@@ -403,7 +435,7 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                             return [value, name];
                                         }}
                                         labelFormatter={(label) => `Intersection: ${label}`}
-                                        content={({ active, payload }) => {
+                                        content={({active, payload}) => {
                                             if (active && payload && payload.length) {
                                                 const data = payload[0].payload;
                                                 return (
@@ -413,19 +445,19 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                                         border: '1px solid #ccc',
                                                         borderRadius: '4px'
                                                     }}>
-                                                        <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>
+                                                        <p style={{fontWeight: 'bold', margin: '0 0 5px 0'}}>
                                                             {data.name}
                                                         </p>
-                                                        <p style={{ margin: '0 0 3px 0', color: '#10b981' }}>
+                                                        <p style={{margin: '0 0 3px 0', color: '#10b981'}}>
                                                             Stability Score: {data.stabilityScore}%
                                                         </p>
-                                                        <p style={{ margin: '0 0 3px 0' }}>
+                                                        <p style={{margin: '0 0 3px 0'}}>
                                                             Passes: {data.passes}
                                                         </p>
-                                                        <p style={{ margin: '0 0 3px 0', color: '#ef4444' }}>
+                                                        <p style={{margin: '0 0 3px 0', color: '#ef4444'}}>
                                                             Green Changes: {data.greenChanges}
                                                         </p>
-                                                        <p style={{ margin: '0', color: '#4b5563', fontSize: '12px' }}>
+                                                        <p style={{margin: '0', color: '#4b5563', fontSize: '12px'}}>
                                                             Changes per Pass: {data.changeRatio}
                                                         </p>
                                                     </div>
@@ -453,10 +485,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             )}
 
             {/* Intersections List */}
-            <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Intersections</h3>
-                <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+            <div style={{marginBottom: '32px'}}>
+                <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Intersections</h3>
+                <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                        gap: '12px'
+                    }}>
                         {Object.values(intersections).map(intersection => (
                             <div
                                 key={intersection.id}
@@ -467,8 +503,13 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                     boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
                                 }}
                             >
-                                <div style={{ fontWeight: '600', marginBottom: '4px' }}>{intersection.name}</div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#4b5563' }}>
+                                <div style={{fontWeight: '600', marginBottom: '4px'}}>{intersection.name}</div>
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontSize: '14px',
+                                    color: '#4b5563'
+                                }}>
                                     <span>ID: {intersection.id}</span>
                                     <span>{intersection.passThroughs?.length || 0} passes</span>
                                 </div>
@@ -479,15 +520,15 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             </div>
 
             {/* Passes By Intersection Chart */}
-            <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Passes by Intersection</h3>
-                <div style={{ height: '400px', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
+            <div style={{marginBottom: '32px'}}>
+                <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Passes by Intersection</h3>
+                <div style={{height: '400px', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             data={stats.passesByIntersection}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                            margin={{top: 20, right: 30, left: 20, bottom: 100}}
                         >
-                            <CartesianGrid strokeDasharray="3 3" />
+                            <CartesianGrid strokeDasharray="3 3"/>
                             <XAxis
                                 dataKey="name"
                                 angle={-45}
@@ -495,26 +536,31 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                 interval={0}
                                 height={100}
                             />
-                            <YAxis label={{ value: 'Number of Passes', angle: -90, position: 'insideLeft' }} />
-                            <Tooltip />
-                            <Bar dataKey="passes" fill="#3b82f6" name="Passes" />
+                            <YAxis label={{value: 'Number of Passes', angle: -90, position: 'insideLeft'}}/>
+                            <Tooltip/>
+                            <Bar dataKey="passes" fill="#3b82f6" name="Passes"/>
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
             </div>
 
             {/* Green Interval Changes */}
-            <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Green Interval Changes</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Total Changes</h4>
-                        <p style={{ fontSize: '24px', fontWeight: '600', color: stats.totalGreenIntervalChanges > 0 ? '#f97316' : '#10b981' }}>
+            <div style={{marginBottom: '32px'}}>
+                <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Green Interval Changes</h3>
+                <div
+                    style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px'}}>
+                    <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                        <h4 style={{fontSize: '16px', fontWeight: '500', marginBottom: '12px'}}>Total Changes</h4>
+                        <p style={{
+                            fontSize: '24px',
+                            fontWeight: '600',
+                            color: stats.totalGreenIntervalChanges > 0 ? '#f97316' : '#10b981'
+                        }}>
                             {stats.totalGreenIntervalChanges}
                         </p>
                         {stats.totalGreenIntervalChanges > 0 && (
-                            <div style={{ marginTop: '12px' }}>
-                                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                            <div style={{marginTop: '12px'}}>
+                                <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
                                     {stats.greenChangeTypes.lostGreen > 0 && (
                                         <span style={{
                                             fontSize: '14px',
@@ -543,9 +589,10 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                     </div>
 
                     {greenChangeData.length > 0 && (
-                        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                            <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Change Type Distribution</h4>
-                            <div style={{ height: '250px' }}>
+                        <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                            <h4 style={{fontSize: '16px', fontWeight: '500', marginBottom: '12px'}}>Change Type
+                                Distribution</h4>
+                            <div style={{height: '250px'}}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -556,14 +603,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                             outerRadius={90}
                                             paddingAngle={2}
                                             dataKey="value"
-                                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                                            label={({name, percent}) => `${name}: ${(percent * 100).toFixed(1)}%`}
                                         >
                                             {greenChangeData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                                <Cell key={`cell-${index}`} fill={entry.color}/>
                                             ))}
                                         </Pie>
-                                        <Tooltip formatter={(value) => [value, 'Count']} />
-                                        <Legend verticalAlign="bottom" />
+                                        <Tooltip formatter={(value) => [value, 'Count']}/>
+                                        <Legend verticalAlign="bottom"/>
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -573,35 +620,56 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             </div>
 
             {/* Pass Status Distribution */}
-            <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Pass Status Distribution</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Status Counts</h4>
-                        <ul style={{ listStyleType: 'none', padding: '0' }}>
-                            <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{marginBottom: '32px'}}>
+                <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Pass Status Distribution</h3>
+                <div
+                    style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px'}}>
+                    <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                        <h4 style={{fontSize: '16px', fontWeight: '500', marginBottom: '12px'}}>Status Counts</h4>
+                        <ul style={{listStyleType: 'none', padding: '0'}}>
+                            <li style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '8px 0',
+                                borderBottom: '1px solid #e5e7eb'
+                            }}>
                                 <span>Passes with Predictions:</span>
-                                <span style={{ fontWeight: '500', color: '#10b981' }}>{stats.withPredictionsCount}</span>
+                                <span style={{fontWeight: '500', color: '#10b981'}}>{stats.withPredictionsCount}</span>
                             </li>
-                            <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+                            <li style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '8px 0',
+                                borderBottom: '1px solid #e5e7eb'
+                            }}>
                                 <span>Passes with GPS Issues:</span>
-                                <span style={{ fontWeight: '500', color: '#f59e0b' }}>{stats.gpsIssueCount}</span>
+                                <span style={{fontWeight: '500', color: '#f59e0b'}}>{stats.gpsIssueCount}</span>
                             </li>
-                            <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+                            <li style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '8px 0',
+                                borderBottom: '1px solid #e5e7eb'
+                            }}>
                                 <span>Passes with No Green:</span>
-                                <span style={{ fontWeight: '500', color: '#ef4444' }}>{stats.noGreenWarningCount - stats.gpsIssueCount}</span>
+                                <span style={{
+                                    fontWeight: '500',
+                                    color: '#ef4444'
+                                }}>{stats.noGreenWarningCount - stats.gpsIssueCount}</span>
                             </li>
-                            <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                            <li style={{display: 'flex', justifyContent: 'space-between', padding: '8px 0'}}>
                                 <span>Other Passes:</span>
-                                <span style={{ fontWeight: '500' }}>{stats.totalPasses - stats.withPredictionsCount - stats.noGreenWarningCount}</span>
+                                <span
+                                    style={{fontWeight: '500'}}>{stats.totalPasses - stats.withPredictionsCount - stats.noGreenWarningCount}</span>
                             </li>
                         </ul>
                     </div>
 
                     {passStatusData.length > 0 && (
-                        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                            <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Status Distribution</h4>
-                            <div style={{ height: '250px' }}>
+                        <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                            <h4 style={{fontSize: '16px', fontWeight: '500', marginBottom: '12px'}}>Status
+                                Distribution</h4>
+                            <div style={{height: '250px'}}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -612,14 +680,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                             outerRadius={90}
                                             paddingAngle={2}
                                             dataKey="value"
-                                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                                            label={({name, percent}) => `${name}: ${(percent * 100).toFixed(1)}%`}
                                         >
                                             {passStatusData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                                <Cell key={`cell-${index}`} fill={entry.color}/>
                                             ))}
                                         </Pie>
-                                        <Tooltip formatter={(value) => [value, 'Count']} />
-                                        <Legend verticalAlign="bottom" />
+                                        <Tooltip formatter={(value) => [value, 'Count']}/>
+                                        <Legend verticalAlign="bottom"/>
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -630,10 +698,11 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
 
             {/* Movement Event Availability */}
             {movementEventData.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Movement Event Availability</h3>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <div style={{ height: '300px' }}>
+                <div style={{marginBottom: '32px'}}>
+                    <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Movement Event
+                        Availability</h3>
+                    <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                        <div style={{height: '300px'}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -644,14 +713,14 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                         outerRadius={90}
                                         paddingAngle={2}
                                         dataKey="value"
-                                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                                        label={({name, percent}) => `${name}: ${(percent * 100).toFixed(1)}%`}
                                     >
                                         {movementEventData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                            <Cell key={`cell-${index}`} fill={entry.color}/>
                                         ))}
                                     </Pie>
-                                    <Tooltip formatter={(value) => [value, 'Count']} />
-                                    <Legend verticalAlign="bottom" />
+                                    <Tooltip formatter={(value) => [value, 'Count']}/>
+                                    <Legend verticalAlign="bottom"/>
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
@@ -662,15 +731,16 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
             {/* Original GLOSA Advice Distribution - For Backwards Compatibility */}
             {glosaAdviceData.length > 0 && (
                 <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Overall GLOSA Advice Distribution</h3>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                        <div style={{ height: '400px' }}>
+                    <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px'}}>Overall GLOSA Advice
+                        Distribution</h3>
+                    <div style={{backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px'}}>
+                        <div style={{height: '400px'}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
                                     data={glosaAdviceData}
-                                    margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                                    margin={{top: 20, right: 30, left: 20, bottom: 100}}
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <CartesianGrid strokeDasharray="3 3"/>
                                     <XAxis
                                         dataKey="advice"
                                         angle={-45}
@@ -678,9 +748,9 @@ const GeneralOverviewTab = ({ intersections, filteredData = {} }) => {
                                         interval={0}
                                         height={100}
                                     />
-                                    <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
-                                    <Tooltip />
-                                    <Bar dataKey="count" name="Count" fill="#3b82f6" />
+                                    <YAxis label={{value: 'Count', angle: -90, position: 'insideLeft'}}/>
+                                    <Tooltip/>
+                                    <Bar dataKey="count" name="Count" fill="#3b82f6"/>
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
