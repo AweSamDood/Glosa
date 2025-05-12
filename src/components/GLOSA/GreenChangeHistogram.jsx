@@ -37,6 +37,12 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
     const histogramData = useMemo(() => {
         if (!greenChangeMagnitudes) return [];
 
+        // Debug: Log what we're actually working with
+        console.log("Creating histogram with data:",
+            Object.entries(greenChangeMagnitudes).map(([type, values]) =>
+                `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values`
+            ).join(', '));
+
         // Determine the number of bins based on the max value and bin size
         const maxBin = Math.ceil(maxValue / binSize) * binSize;
         const bins = [];
@@ -57,23 +63,31 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
         // Fill the bins with data
         Object.entries(greenChangeMagnitudes).forEach(([type, values]) => {
             if (Array.isArray(values) && values.length > 0) {
+                console.log(`Processing ${values.length} values for ${type}`);
                 values.forEach(value => {
                     // Find the appropriate bin
                     const binIndex = Math.floor(value / binSize);
                     if (binIndex >= 0 && binIndex < bins.length) {
                         bins[binIndex][type]++;
+                    } else {
+                        console.log(`Value ${value} for ${type} is outside bin range (0-${bins.length-1})`);
                     }
                 });
+            } else {
+                console.log(`No valid values for ${type}`);
             }
         });
 
         // Filter out empty bins (where all types are 0)
-        return bins.filter(bin =>
+        const nonEmptyBins = bins.filter(bin =>
             bin.earlierGreenStart > 0 ||
             bin.extendedGreenEnd > 0 ||
             bin.laterGreenStart > 0 ||
             bin.shortenedGreenEnd > 0
         );
+
+        console.log(`Created ${nonEmptyBins.length} non-empty bins from ${bins.length} total bins`);
+        return nonEmptyBins;
     }, [greenChangeMagnitudes, binSize, maxValue]);
 
     // Calculate summary statistics

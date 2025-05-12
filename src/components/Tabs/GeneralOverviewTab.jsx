@@ -70,6 +70,8 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
             }
         };
 
+        console.log("Initialized greenChangeMagnitudes in stats:");
+
         // Process each intersection
         Object.values(intersections).forEach(intersection => {
             const passThroughs = intersection.passThroughs || [];
@@ -108,6 +110,17 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                     intersection.summary.greenChangeTypes.lostGreen || 0;
                 aggregatedStats.greenChangeTypes.gotGreen +=
                     intersection.summary.greenChangeTypes.gotGreen || 0;
+            }
+
+            // Collect green change magnitudes
+            if (intersection.summary?.greenChangeMagnitudes) {
+                Object.entries(intersection.summary.greenChangeMagnitudes).forEach(([type, values]) => {
+                    if (Array.isArray(values) && values.length > 0) {
+                        console.log(`Found ${values.length} ${type} magnitudes in intersection ${intersection.name}`);
+                        aggregatedStats.greenChangeMagnitudes[type] =
+                            aggregatedStats.greenChangeMagnitudes[type].concat(values);
+                    }
+                });
             }
 
             // Process warning counts
@@ -637,9 +650,25 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                 {/* Add the new Green Change Histogram component here for all cases with changes */}
                 {stats.totalGreenIntervalChanges > 0 ? (
                     stats.greenChangeMagnitudes ? (
-                        <GreenChangeHistogram
-                            greenChangeMagnitudes={stats.greenChangeMagnitudes}
-                        />
+                        <>
+                            <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px', marginBottom: '16px' }}>
+                                <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Green Interval Change Magnitude Data</h4>
+                                <pre style={{
+                                    backgroundColor: '#f1f5f9',
+                                    padding: '8px',
+                                    borderRadius: '4px',
+                                    overflow: 'auto',
+                                    fontSize: '12px'
+                                }}>
+                                    {Object.entries(stats.greenChangeMagnitudes).map(([type, values]) =>
+                                        `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values\n`
+                                    ).join('')}
+                                </pre>
+                            </div>
+                            <GreenChangeHistogram
+                                greenChangeMagnitudes={stats.greenChangeMagnitudes}
+                            />
+                        </>
                     ) : (
                         <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px' }}>
                             <p style={{ color: '#6b7280' }}>
