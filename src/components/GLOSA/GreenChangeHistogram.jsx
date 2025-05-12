@@ -1,16 +1,31 @@
 // src/components/GLOSA/GreenChangeHistogram.jsx
 import React, { useState, useMemo } from 'react';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    ScatterChart, Scatter, ZAxis
 } from 'recharts';
 
 const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
+    // Format change type for display - moved to the top to avoid reference error
+    const formatChangeType = (type) => {
+        switch(type) {
+            case 'earlierGreenStart': return 'Earlier Green Start';
+            case 'extendedGreenEnd': return 'Extended Green End';
+            case 'laterGreenStart': return 'Later Green Start';
+            case 'shortenedGreenEnd': return 'Shortened Green End';
+            default: return type;
+        }
+    };
+
     // Configuration state
     console.log("GreenChangeHistogram received data:",
         greenChangeMagnitudes ?
             Object.entries(greenChangeMagnitudes).map(([type, values]) =>
                 `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values`)
             : 'No data');
+
+    // Define outlier threshold
+    const OUTLIER_THRESHOLD = 60; // seconds
 
     // Configuration state
     const [binSize, setBinSize] = useState(5); // Default bin size of 5 seconds
@@ -21,30 +36,63 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
         shortenedGreenEnd: true
     });
 
-    // Get the max value across all change types for setting the chart range
+    // Split data into regular values and outliers
+    const { regularData, outlierData } = useMemo(() => {
+        const regular = {
+            earlierGreenStart: [],
+            extendedGreenEnd: [],
+            laterGreenStart: [],
+            shortenedGreenEnd: []
+        };
+
+        const outliers = {
+            earlierGreenStart: [],
+            extendedGreenEnd: [],
+            laterGreenStart: [],
+            shortenedGreenEnd: []
+        };
+
+        // Split values based on outlier threshold
+        Object.entries(greenChangeMagnitudes || {}).forEach(([type, values]) => {
+            if (Array.isArray(values)) {
+                values.forEach(value => {
+                    if (value > OUTLIER_THRESHOLD) {
+                        outliers[type].push(value);
+                    } else {
+                        regular[type].push(value);
+                    }
+                });
+            }
+        });
+
+        return { regularData: regular, outlierData: outliers };
+    }, [greenChangeMagnitudes]);
+
+    // Get the max value across all regular change types for setting the chart range
     const maxValue = useMemo(() => {
         let max = 0;
-        Object.entries(greenChangeMagnitudes || {}).forEach(([type, values]) => {
+        Object.entries(regularData || {}).forEach(([type, values]) => {
             if (Array.isArray(values) && values.length > 0) {
                 const typeMax = Math.max(...values);
                 if (typeMax > max) max = typeMax;
             }
         });
         return max;
-    }, [greenChangeMagnitudes]);
+    }, [regularData]);
 
-    // Create histogram data
+    // Create histogram data for regular values
     const histogramData = useMemo(() => {
-        if (!greenChangeMagnitudes) return [];
+        if (!regularData) return [];
 
         // Debug: Log what we're actually working with
-        console.log("Creating histogram with data:",
-            Object.entries(greenChangeMagnitudes).map(([type, values]) =>
+        console.log("Creating histogram with regular data:",
+            Object.entries(regularData).map(([type, values]) =>
                 `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values`
             ).join(', '));
 
         // Determine the number of bins based on the max value and bin size
-        const maxBin = Math.ceil(maxValue / binSize) * binSize;
+        // Cap at OUTLIER_THRESHOLD
+        const maxBin = Math.min(Math.ceil(maxValue / binSize) * binSize, OUTLIER_THRESHOLD);
         const bins = [];
 
         // Create empty bins
@@ -60,21 +108,21 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
             });
         }
 
-        // Fill the bins with data
-        Object.entries(greenChangeMagnitudes).forEach(([type, values]) => {
+        // Fill the bins with regular data
+        Object.entries(regularData).forEach(([type, values]) => {
             if (Array.isArray(values) && values.length > 0) {
-                console.log(`Processing ${values.length} values for ${type}`);
+                console.log(`Processing ${values.length} regular values for ${type}`);
                 values.forEach(value => {
                     // Find the appropriate bin
                     const binIndex = Math.floor(value / binSize);
                     if (binIndex >= 0 && binIndex < bins.length) {
                         bins[binIndex][type]++;
                     } else {
-                        console.log(`Value ${value} for ${type} is outside bin range (0-${bins.length-1})`);
+                        console.log(`Value ${value} for ${type} is outside regular bin range (0-${bins.length-1})`);
                     }
                 });
             } else {
-                console.log(`No valid values for ${type}`);
+                console.log(`No valid regular values for ${type}`);
             }
         });
 
@@ -88,9 +136,46 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
 
         console.log(`Created ${nonEmptyBins.length} non-empty bins from ${bins.length} total bins`);
         return nonEmptyBins;
-    }, [greenChangeMagnitudes, binSize, maxValue]);
+    }, [regularData, binSize, maxValue]);
 
-    // Calculate summary statistics
+    // Prepare outlier data for visualization
+    const outlierChartData = useMemo(() => {
+        const result = [];
+
+        Object.entries(outlierData).forEach(([type, values]) => {
+            if (Array.isArray(values) && values.length > 0) {
+                values.forEach(value => {
+                    result.push({
+                        type,
+                        value,
+                        displayType: formatChangeType(type),
+                        size: 10 // Size for scatter plot
+                    });
+                });
+            }
+        });
+
+        // Sort by magnitude
+        return result.sort((a, b) => a.value - b.value);
+    }, [outlierData]);
+
+    // Count outliers by type
+    const outlierCounts = useMemo(() => {
+        const counts = {
+            earlierGreenStart: outlierData.earlierGreenStart.length,
+            extendedGreenEnd: outlierData.extendedGreenEnd.length,
+            laterGreenStart: outlierData.laterGreenStart.length,
+            shortenedGreenEnd: outlierData.shortenedGreenEnd.length,
+            total: 0
+        };
+
+        counts.total = counts.earlierGreenStart + counts.extendedGreenEnd +
+            counts.laterGreenStart + counts.shortenedGreenEnd;
+
+        return counts;
+    }, [outlierData]);
+
+    // Calculate summary statistics for all data (including outliers)
     const stats = useMemo(() => {
         const result = {
             earlierGreenStart: { count: 0, avg: 0, min: Infinity, max: 0 },
@@ -99,6 +184,7 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
             shortenedGreenEnd: { count: 0, avg: 0, min: Infinity, max: 0 }
         };
 
+        // Combine regular and outlier data for stats calculation
         Object.entries(greenChangeMagnitudes || {}).forEach(([type, values]) => {
             if (Array.isArray(values) && values.length > 0) {
                 result[type].count = values.length;
@@ -202,18 +288,33 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
         return null;
     };
 
-    // Format change type for display
-    const formatChangeType = (type) => {
-        switch(type) {
-            case 'earlierGreenStart': return 'Earlier Green Start';
-            case 'extendedGreenEnd': return 'Extended Green End';
-            case 'laterGreenStart': return 'Later Green Start';
-            case 'shortenedGreenEnd': return 'Shortened Green End';
-            default: return type;
+    // Custom tooltip for outlier scatter chart
+    const OutlierTooltip = ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div style={{
+                    backgroundColor: 'white',
+                    padding: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '6px',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                }}>
+                    <p style={{ fontWeight: 'bold', marginBottom: '5px', color: getColorDarker(data.type) }}>
+                        {data.displayType}
+                    </p>
+                    <p style={{ margin: '3px 0' }}>
+                        Magnitude: <span style={{ fontWeight: '600' }}>{data.value.toFixed(1)} seconds</span>
+                    </p>
+                </div>
+            );
         }
+        return null;
     };
 
-    // Function to calculate total changes
+    // This function was moved to the top of the component to avoid reference errors
+
+    // Function to calculate total changes (regular + outliers)
     const calculateTotalChanges = () => {
         let total = 0;
         Object.entries(greenChangeMagnitudes || {}).forEach(([type, values]) => {
@@ -270,7 +371,12 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
                             Total Changes: {totalChanges}
                         </span>
                         <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                            Max Change: {maxValue.toFixed(1)}s
+                            <span>Regular Changes: {totalChanges - outlierCounts.total}</span>
+                            {outlierCounts.total > 0 && (
+                                <span style={{ marginLeft: '8px', color: '#f59e0b', fontWeight: '500' }}>
+                                    Outliers (&gt;{OUTLIER_THRESHOLD}s): {outlierCounts.total}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -369,6 +475,16 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <p style={{ fontSize: '13px', margin: 0 }}>
                                         <span style={{ fontWeight: '500' }}>Count:</span> {data.count}
+                                        {outlierData[type].length > 0 && (
+                                            <span style={{
+                                                marginLeft: '8px',
+                                                color: '#f59e0b',
+                                                fontSize: '12px',
+                                                fontWeight: '500'
+                                            }}>
+                                                (incl. {outlierData[type].length} outliers)
+                                            </span>
+                                        )}
                                     </p>
                                     <p style={{ fontSize: '13px', margin: 0 }}>
                                         <span style={{ fontWeight: '500' }}>Average:</span> {data.avg.toFixed(1)}s
@@ -383,14 +499,18 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
                 </div>
             </div>
 
-            {/* Histogram Chart */}
+            {/* Regular Histogram Chart */}
             {histogramData.length > 0 ? (
                 <div style={{
                     backgroundColor: 'white',
                     padding: '16px',
                     borderRadius: '8px',
-                    height: '400px'
+                    height: '400px',
+                    marginBottom: outlierCounts.total > 0 ? '16px' : '0'
                 }}>
+                    <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px' }}>
+                        Regular Changes (≤ {OUTLIER_THRESHOLD} seconds)
+                    </h4>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             data={histogramData}
@@ -462,11 +582,132 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
                     backgroundColor: 'white',
                     padding: '24px',
                     borderRadius: '8px',
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    marginBottom: outlierCounts.total > 0 ? '16px' : '0'
                 }}>
                     <p style={{ color: '#6b7280' }}>
-                        No green interval change data available.
+                        No regular green interval change data available.
                     </p>
+                </div>
+            )}
+
+            {/* Outlier Visualization */}
+            {outlierCounts.total > 0 && (
+                <div style={{
+                    backgroundColor: 'white',
+                    padding: '16px',
+                    borderRadius: '8px',
+                }}>
+                    <h4 style={{
+                        fontSize: '15px',
+                        fontWeight: '600',
+                        marginBottom: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#f59e0b" width="20" height="20">
+                            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.515 2.625H3.72c-1.345 0-2.188-1.458-1.515-2.625l6.28-10.875zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                        Outlier Changes (> {OUTLIER_THRESHOLD} seconds)
+                    </h4>
+
+                    {/* Outlier Chart */}
+                    {outlierChartData.length > 0 ? (
+                        <div style={{ height: '200px', marginBottom: '16px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <ScatterChart
+                                    margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis
+                                        type="number"
+                                        dataKey="value"
+                                        name="Magnitude"
+                                        domain={['dataMin', 'dataMax']}
+                                        label={{
+                                            value: 'Change Magnitude (seconds)',
+                                            position: 'insideBottom',
+                                            offset: -10
+                                        }}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="displayType"
+                                        name="Type"
+                                        width={150}
+                                    />
+                                    <ZAxis type="number" dataKey="size" range={[50, 50]} />
+                                    <Tooltip content={<OutlierTooltip />} />
+                                    {selectedChangeTypes.earlierGreenStart && outlierData.earlierGreenStart.length > 0 && (
+                                        <Scatter
+                                            name="Earlier Green Start"
+                                            data={outlierChartData.filter(d => d.type === 'earlierGreenStart')}
+                                            fill={getColor('earlierGreenStart')}
+                                        />
+                                    )}
+                                    {selectedChangeTypes.extendedGreenEnd && outlierData.extendedGreenEnd.length > 0 && (
+                                        <Scatter
+                                            name="Extended Green End"
+                                            data={outlierChartData.filter(d => d.type === 'extendedGreenEnd')}
+                                            fill={getColor('extendedGreenEnd')}
+                                        />
+                                    )}
+                                    {selectedChangeTypes.laterGreenStart && outlierData.laterGreenStart.length > 0 && (
+                                        <Scatter
+                                            name="Later Green Start"
+                                            data={outlierChartData.filter(d => d.type === 'laterGreenStart')}
+                                            fill={getColor('laterGreenStart')}
+                                        />
+                                    )}
+                                    {selectedChangeTypes.shortenedGreenEnd && outlierData.shortenedGreenEnd.length > 0 && (
+                                        <Scatter
+                                            name="Shortened Green End"
+                                            data={outlierChartData.filter(d => d.type === 'shortenedGreenEnd')}
+                                            fill={getColor('shortenedGreenEnd')}
+                                        />
+                                    )}
+                                </ScatterChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : null}
+
+                    {/* Outlier table */}
+                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                            <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Type</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Magnitude (seconds)</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {outlierChartData.map((outlier, index) => (
+                                selectedChangeTypes[outlier.type] && (
+                                    <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                        <td style={{
+                                            padding: '8px 12px',
+                                            color: getColorDarker(outlier.type),
+                                            fontWeight: '500'
+                                        }}>
+                                            {outlier.displayType}
+                                        </td>
+                                        <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                            {outlier.value.toFixed(1)}
+                                        </td>
+                                    </tr>
+                                )
+                            ))}
+                            {outlierChartData.filter(o => selectedChangeTypes[o.type]).length === 0 && (
+                                <tr>
+                                    <td colSpan={2} style={{ padding: '16px', textAlign: 'center', color: '#6b7280' }}>
+                                        No outliers for selected change types
+                                    </td>
+                                </tr>
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 
@@ -498,9 +739,13 @@ const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
                         <strong>Shortened Green End</strong>: Green phase ends earlier than predicted (negative change)
                     </li>
                 </ul>
-                <p>
+                <p style={{ marginBottom: '10px' }}>
                     Larger changes (higher magnitude) indicate greater variability in traffic signal timing.
                     Frequent large-magnitude changes may suggest adaptive traffic control responding to changing conditions.
+                </p>
+                <p>
+                    Changes greater than {OUTLIER_THRESHOLD} seconds are considered outliers and displayed separately.
+                    These extreme changes could indicate significant traffic control interventions or potential data anomalies.
                 </p>
             </div>
         </div>
