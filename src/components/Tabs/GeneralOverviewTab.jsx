@@ -16,6 +16,7 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
     const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
 
     // Compute aggregated statistics for the overview
+    // Compute aggregated statistics for the overview
     const stats = useMemo(() => {
         if (!intersections || Object.keys(intersections).length === 0) {
             return {
@@ -29,7 +30,14 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                     totalSignalGroups: 0,
                     glosaAdviceDistribution: {}
                 },
-                intersectionStability: []
+                intersectionStability: [],
+                // Make sure greenChangeMagnitudes is initialized
+                greenChangeMagnitudes: {
+                    earlierGreenStart: [],
+                    extendedGreenEnd: [],
+                    laterGreenStart: [],
+                    shortenedGreenEnd: []
+                }
             };
         }
 
@@ -52,7 +60,14 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                 movementEventAvailability: {available: 0, unavailable: 0, none: 0},
                 glosaAdviceDistribution: {}
             },
-            intersectionStability: []
+            intersectionStability: [],
+            // Initialize greenChangeMagnitudes here
+            greenChangeMagnitudes: {
+                earlierGreenStart: [],
+                extendedGreenEnd: [],
+                laterGreenStart: [],
+                shortenedGreenEnd: []
+            }
         };
 
         // Process each intersection
@@ -570,8 +585,8 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                                             padding: '4px 10px',
                                             borderRadius: '16px'
                                         }}>
-                                Lost Green: {stats.greenChangeTypes.lostGreen}
-                            </span>
+                        Lost Green: {stats.greenChangeTypes.lostGreen}
+                    </span>
                                     )}
                                     {stats.greenChangeTypes.gotGreen > 0 && (
                                         <span style={{
@@ -581,8 +596,8 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                                             padding: '4px 10px',
                                             borderRadius: '16px'
                                         }}>
-                                Got Green: {stats.greenChangeTypes.gotGreen}
-                            </span>
+                        Got Green: {stats.greenChangeTypes.gotGreen}
+                    </span>
                                     )}
                                 </div>
                             </div>
@@ -619,12 +634,20 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                     )}
                 </div>
 
-                {/* Add the new Green Change Histogram component here if there are changes */}
-                {stats.totalGreenIntervalChanges > 0 && stats.greenChangeMagnitudes && (
-                    <GreenChangeHistogram
-                        greenChangeMagnitudes={stats.greenChangeMagnitudes}
-                    />
-                )}
+                {/* Add the new Green Change Histogram component here for all cases with changes */}
+                {stats.totalGreenIntervalChanges > 0 ? (
+                    stats.greenChangeMagnitudes ? (
+                        <GreenChangeHistogram
+                            greenChangeMagnitudes={stats.greenChangeMagnitudes}
+                        />
+                    ) : (
+                        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px' }}>
+                            <p style={{ color: '#6b7280' }}>
+                                Green interval changes detected, but detailed magnitude data is not available.
+                            </p>
+                        </div>
+                    )
+                ) : null}
             </div>
 
             {/* Pass Status Distribution */}

@@ -6,6 +6,13 @@ import {
 
 const GreenChangeHistogram = ({ greenChangeMagnitudes }) => {
     // Configuration state
+    console.log("GreenChangeHistogram received data:",
+        greenChangeMagnitudes ?
+            Object.entries(greenChangeMagnitudes).map(([type, values]) =>
+                `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values`)
+            : 'No data');
+
+    // Configuration state
     const [binSize, setBinSize] = useState(5); // Default bin size of 5 seconds
     const [selectedChangeTypes, setSelectedChangeTypes] = useState({
         earlierGreenStart: true,
