@@ -390,6 +390,32 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                             </div>
                         )}
 
+                        {/* Green Change Histogram - Moved to Advanced Analysis */}
+                        {Object.values(dataToUse).some(intersection =>
+                            intersection.summary?.greenIntervalChanges > 0) && (
+                            <GreenChangeHistogram
+                                greenChangeMagnitudes={Object.values(dataToUse).reduce((allMagnitudes, intersection) => {
+                                    // Combine magnitudes from all filtered intersections
+                                    if (intersection.summary?.greenChangeMagnitudes) {
+                                        Object.entries(intersection.summary.greenChangeMagnitudes).forEach(([type, values]) => {
+                                            if (Array.isArray(values) && values.length > 0) {
+                                                if (!allMagnitudes[type]) {
+                                                    allMagnitudes[type] = [];
+                                                }
+                                                allMagnitudes[type] = allMagnitudes[type].concat(values);
+                                            }
+                                        });
+                                    }
+                                    return allMagnitudes;
+                                }, {
+                                    earlierGreenStart: [],
+                                    extendedGreenEnd: [],
+                                    laterGreenStart: [],
+                                    shortenedGreenEnd: []
+                                })}
+                            />
+                        )}
+
                         {/* GLOSA Advice Simulation Analysis */}
                         <GlosaAdviceSimulationAnalysis
                             intersections={dataToUse}
@@ -646,37 +672,6 @@ const GeneralOverviewTab = ({intersections, filteredData = {}}) => {
                         </div>
                     )}
                 </div>
-
-                {/* Add the new Green Change Histogram component here for all cases with changes */}
-                {stats.totalGreenIntervalChanges > 0 ? (
-                    stats.greenChangeMagnitudes ? (
-                        <>
-                            <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px', marginBottom: '16px' }}>
-                                <h4 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '12px' }}>Green Interval Change Magnitude Data</h4>
-                                <pre style={{
-                                    backgroundColor: '#f1f5f9',
-                                    padding: '8px',
-                                    borderRadius: '4px',
-                                    overflow: 'auto',
-                                    fontSize: '12px'
-                                }}>
-                                    {Object.entries(stats.greenChangeMagnitudes).map(([type, values]) =>
-                                        `${type}: ${Array.isArray(values) ? values.length : 'not an array'} values\n`
-                                    ).join('')}
-                                </pre>
-                            </div>
-                            <GreenChangeHistogram
-                                greenChangeMagnitudes={stats.greenChangeMagnitudes}
-                            />
-                        </>
-                    ) : (
-                        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', marginTop: '16px' }}>
-                            <p style={{ color: '#6b7280' }}>
-                                Green interval changes detected, but detailed magnitude data is not available.
-                            </p>
-                        </div>
-                    )
-                ) : null}
             </div>
 
             {/* Pass Status Distribution */}
