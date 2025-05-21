@@ -136,8 +136,19 @@ try:
     plt.style.use('seaborn-v0_8-darkgrid') # Use a different style for better contrast
     print("Creating plots...")
 
+    # Increase the default font sizes for better readability
+    plt.rcParams.update({
+        'font.size': 14,
+        'axes.titlesize': 16,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+    })
+
     # Create figure and axes for the plots - NOW 3 ROWS
-    fig, axs = plt.subplots(3, 1, figsize=(14, 15), sharex=True) # Increased height for 3 plots
+    # A4 ratio is approximately 1:1.414, using dimensions that better match this ratio
+    fig, axs = plt.subplots(3, 1, figsize=(8.3, 11.7), sharex=True) # A4 dimensions in inches
 
     # Define colors from a palette (e.g., tab10)
     colors = plt.cm.tab10.colors
@@ -179,6 +190,14 @@ try:
 
     # Adjust layout and display the plot
     plt.tight_layout(rect=[0, 0.03, 1, 0.98]) # Adjust layout slightly
+
+    # Save the figure as an image file in the current directory
+    save_filename = 'kalman_filter_comparison.png'
+    print(f"Saving plot as '{save_filename}'...")
+    plt.savefig(save_filename, dpi=300, bbox_inches='tight')
+    print(f"Plot saved as '{save_filename}'")
+
+    # Also display the plot
     print("Displaying plot...")
     plt.show()
     print("Plot displayed.")
